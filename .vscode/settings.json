@@ -1,0 +1,3 @@
+{
+    "pylint.args": ["\"--generated-members\", \"torch.*\""]
+}

@@ -1,0 +1,57 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python Debugger: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "DISPLAY":"${input:ipAddr}:0.0",
+                "BROWSER":"firefox-wrapper"
+            }
+        }, {
+            "name": "Python Debugger: run_idlmav.py",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "explore/run_idlmav.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                // See issue described in "test_default_browser.py"
+                // "DISPLAY":"${input:ipAddr}:0.0",
+                "BROWSER":"firefox-wrapper"
+            }
+        }, {
+            "name": "Python Debugger: test_default_browser.py",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "explore/test_default_browser.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "DISPLAY":"${input:ipAddr}:0.0",
+                "BROWSER":"firefox-wrapper"
+            }
+        }
+    ],
+    "inputs": [
+        {
+            // Dependency: "Tasks Shell Input" VSCode extension by Augusto
+            "id": "ipAddr",
+            "type": "command",
+            "command": "shellCommand.execute",
+            "args": {
+                "command": "ip route | grep default | awk '{print $3}'",
+                "fieldSeparator": "|",
+                "description": "Select the IP address",
+                "useSingleResult": "true"
+            }
+        }
+    ]
+}
