@@ -11,7 +11,7 @@ scripts from this library directly.
   therefore also do not require X11 forwarding. See 
   "test_plotly_browser_setup.py"
 
-For more setup details, refer to "environment_setup.ipynb"
+For more setup details, refer to "setup_vscode_wsl.ipynb"
 """
 import matplotlib
 matplotlib.use('TkAgg')

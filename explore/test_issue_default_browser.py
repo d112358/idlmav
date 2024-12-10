@@ -22,7 +22,7 @@ Resolution:
     branch in "webbrowser.py"
 * To resolve, perform either of 2 actions:
   - Run the X-server on the Windows side 
-    (see "environment_setup.ipynb")
+    (see "setup_vscode_wsl.ipynb")
   - Don't set the `DISPLAY` environment variable if not required
     (see "launch.json")
 """

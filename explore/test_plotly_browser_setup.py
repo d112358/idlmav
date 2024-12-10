@@ -8,7 +8,7 @@ scripts from this library directly. Figures created from notebooks
 will be displayed inline in the notebook and do not require this 
 setup.
 
-For more setup details, refer to "environment_setup.ipynb"
+For more setup details, refer to "setup_vscode_wsl.ipynb"
 """
 import plotly.io as pio
 import plotly.graph_objects as go
