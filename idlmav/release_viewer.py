@@ -1,4 +1,4 @@
-from idlmav_types import MavGraph, MavNode, MavConnection
+from idlmav.mavtypes import MavGraph, MavNode, MavConnection
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -8,8 +8,8 @@ class ReleaseViewer:
     This viewer avoids `go.FigureWidget` and `ipywidgets`, making it 
     suitable for use when releasing a model, since users browsing 
     through models on GitHub without any running Jupyter kernel or 
-    dynamic components will still be able to see any output produced 
-    by this viewer. 
+    dynamic components will still be able to see all output produced 
+    by this viewer (e.g. using nbviewer).
 
     Available interactions and limitations:
     * Hover interactions are available, but no click events

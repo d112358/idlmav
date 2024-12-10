@@ -1,4 +1,4 @@
-from idlmav_types import MavNode, MavConnection, MavGraph
+from idlmav.mavtypes import MavNode, MavConnection, MavGraph
 from typing import Any, Dict, List, Tuple, Union, Set
 import warnings
 import torch

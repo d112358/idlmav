@@ -1,7 +1,7 @@
 # IDLMAV
 Interactive deep learning model architecture visualization (IDLMAV) is a tool that creates interactive visualizations of model architectures for display in Jupyter notebooks.
 * It does not require a successful forward pass: it can also visualize partial models
-* It can output a release graph with limited interactivity without the need of a running backend/kernel. Release graphs are displayed correctly when browsing directly on GitHub.
+* It can output a release graph with limited interactivity without the need of a running backend/kernel. Release graphs are displayed correctly when viewing GitHub links with [nbviewer](https://nbviewer.org/).
 
 # Usage examples
 ## Interactive graph
@@ -52,7 +52,7 @@ with plotly_renderer_context('notebook_connected'):
 
 # Use cases
 * Iteratively designing a model and viewing activations, parameter counts and FLOPS "so far" before the whole model has been defined
-* Document a model in a notebook and generate the architecture in such a way that it is viewable on GitHub without a running kernel
+* Document a model in a notebook and generate the architecture in such a way that it is viewable on [nbviewer](https://nbviewer.org/) without a running kernel
 * Analyze 3rd party models when importing them into a notebook
 * Scan a model for potential places to save parameters or FLOPS
 

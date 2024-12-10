@@ -5,7 +5,7 @@ consisting of VSCode, WSL and the Python debugger.
 Symptom: the debugger would hang at the IDLMAV import statement
 
 Summary of call stack:
-* `idlmav_utils` calls `list(pio.renderers)`
+* `mavutils` calls `list(pio.renderers)`
 * This imports `webbrowser` and calls `webbrowser.get()`
 * This executes a command `xdg-settings get default-web-browser`
   in a subprocess and waits for the result on stdout

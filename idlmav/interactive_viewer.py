@@ -1,4 +1,4 @@
-from idlmav_types import MavNode, MavGraph, MavConnection
+from idlmav.mavtypes import MavNode, MavGraph, MavConnection
 import time
 import numpy as np
 import plotly.graph_objects as go
@@ -563,3 +563,5 @@ def append_arc_coords(x, y, cx, cy, r, quadrant, ccw:bool, num_points:int=20):
     ydata = cy - r*np.sin(t)  # Negative because y-axis is inverted on graph
     x += list(xdata)
     y += list(ydata)
+
+__all__ = ["InteractiveViewer"]

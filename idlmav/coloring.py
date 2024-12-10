@@ -1,4 +1,4 @@
-from idlmav_types import MavNode, MavConnection, MavGraph
+from idlmav.mavtypes import MavNode, MavConnection, MavGraph
 from typing import Dict, List, Tuple, Union, Set, overload
 import plotly.colors as pc
 import warnings
