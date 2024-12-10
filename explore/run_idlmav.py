@@ -26,7 +26,7 @@ import os
 workspace_path = os.path.abspath('')
 sys.path.append(workspace_path)
 
-from idlmav.idlmav import MAV, plotly_renderer_context
+from idlmav import MAV, plotly_renderer_context
 
 import numpy as np
 import torch

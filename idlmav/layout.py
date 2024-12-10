@@ -1,4 +1,4 @@
-from idlmav.mavtypes import MavNode, MavConnection, MavGraph
+from .mavtypes import MavNode, MavConnection, MavGraph
 from typing import List, Tuple
 import numpy as np
 import itertools

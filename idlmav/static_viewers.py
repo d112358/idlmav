@@ -1,4 +1,4 @@
-from idlmav.mavtypes import MavNode, MavGraph
+from .mavtypes import MavNode, MavGraph
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import patches, lines

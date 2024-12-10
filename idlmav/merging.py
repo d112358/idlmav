@@ -1,4 +1,4 @@
-from idlmav.mavtypes import MavNode, MavGraph
+from .mavtypes import MavNode, MavGraph
 from typing import overload
 
 class MavMerger():

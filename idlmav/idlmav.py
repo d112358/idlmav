@@ -2,13 +2,12 @@ from typing import Tuple, List, Dict, Set, Union, overload
 from torch import nn, Tensor
 import plotly.graph_objects as go
 import ipywidgets as widgets
-from idlmav.tracing import MavTracer
-from idlmav.merging import merge_graph_nodes
-from idlmav.coloring import color_graph_nodes
-from idlmav.layout import layout_graph_nodes
-from idlmav.release_viewer import ReleaseViewer
-from idlmav.interactive_viewer import InteractiveViewer
-from idlmav.mavutils import available_renderers, plotly_renderer_context
+from .tracing import MavTracer
+from .merging import merge_graph_nodes
+from .coloring import color_graph_nodes
+from .layout import layout_graph_nodes
+from .release_viewer import ReleaseViewer
+from .interactive_viewer import InteractiveViewer
 
 class MAV:
     def __init__(self, model:nn.Module, inputs:Union[Tensor, Tuple[Tensor]], device=None,
@@ -45,5 +44,3 @@ class MAV:
                            ) -> go.Figure: ...
     def draw_release_graph(self, *args, **kwargs) -> go.Figure:
         return ReleaseViewer(self.tracer.g).draw(*args, **kwargs)
-    
-__all__ = ["MAV", "MavTracer", "merge_graph_nodes", "color_graph_nodes", "layout_graph_nodes", "ReleaseViewer", "InteractiveViewer", "available_renderers", "plotly_renderer_context"]

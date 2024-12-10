@@ -1,4 +1,4 @@
-from idlmav.mavtypes import MavNode, MavGraph, MavConnection
+from .mavtypes import MavNode, MavGraph, MavConnection
 import time
 import numpy as np
 import plotly.graph_objects as go

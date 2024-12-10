@@ -1,4 +1,4 @@
-from idlmav.mavtypes import MavGraph, MavNode, MavConnection
+from .mavtypes import MavGraph, MavNode, MavConnection
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
