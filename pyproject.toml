@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools >= 64.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name="idlmav"
+dynamic = ["version"]
+dependencies = [
+  "torch>=2.3.0",
+  "numpy",
+  "tabulate",
+  "torchprofile",
+  "munkres",
+  "plotly",
+  "nbformat",
+]
+requires-python = ">= 3.9"
+authors = [
+  {name = "Dirk Oosthuizen", email = "dirk.jj.oosthuizen@gmail.com"},
+]
+description = "Create interactive visualizations of model architectures for display in Jupyter notebooks"
+readme = "README.md"
+license = {'text'= "MIT"}
+keywords = [
+  "pytorch", "torch", "deep learning", "neural network", "model architecture", 
+  "visualization", "interactive", "jupyter", "notebook", "plotly"
+]
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python",
+]
+
+[project.urls]
+Repository = "https://github.com/d112358/idlmav.git"
+"Bug Tracker" = "https://github.com/d112358/idlmav/issues"
+
+[tool.setuptools]
+packages = ["idlmav"]
+
+[tool.setuptools.dynamic]
+version = {attr = "idlmav.__version__"}
