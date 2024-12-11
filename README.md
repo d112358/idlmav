@@ -3,6 +3,12 @@ Interactive deep learning model architecture visualization (IDLMAV) is a tool th
 * It does not require a successful forward pass: it can also visualize partial models
 * It can output a release graph with limited interactivity without the need of a running backend/kernel. Release graphs are displayed correctly when viewing GitHub links with [nbviewer](https://nbviewer.org/).
 
+# Installation
+
+```
+pip install git+https://github.com/d112358/idlmav.git
+```
+
 # Usage examples
 ## Interactive graph
 ```python
