@@ -111,16 +111,25 @@ class InteractiveViewer:
         self.sel_marker_idx = len(self.main_fig.data)-1
 
         # Add connections lines between the nodes
-        line_traces = []
+        # * Use a single trace with `None` values separating different lines
+        # * Using a separate trace for every line cause a blank display 
+        #   on Colab
+        # * Separate traces may also negatively impact reactivity, e.g. 
+        #   to pan & zoom actions
+        x_coords, y_coords = [],[]
         for c in g.connections:
-            x_coords, y_coords = self.get_connection_coords(c)
-            line_trace = go.Scatter(
-                x=x_coords, y=y_coords, mode="lines",
-                line=dict(color="gray", width=1),
-                showlegend=False
-            )
-            self.main_fig.add_trace(line_trace)
-            line_traces.append(line_trace)
+            xs, ys = self.get_connection_coords(c)
+            if x_coords: x_coords.append(None)
+            if y_coords: y_coords.append(None)
+            x_coords += xs
+            y_coords += ys
+
+        line_trace = go.Scatter(
+            x=x_coords, y=y_coords, mode="lines",
+            line=dict(color="gray", width=1),
+            showlegend=False
+        )
+        self.main_fig.add_trace(line_trace)
 
         # Add the node markers
         node_trace = go.Scatter(
@@ -181,8 +190,7 @@ class InteractiveViewer:
             panels.insert(0, self.overview_panel)
 
             # Connection lines
-            for line_trace in line_traces:
-                self.overview_fig.add_trace(line_trace)
+            self.overview_fig.add_trace(line_trace)
                 
             # Nodes
             overview_nodes_trace = go.Scatter(

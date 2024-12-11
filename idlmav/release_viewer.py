@@ -84,15 +84,23 @@ class ReleaseViewer:
         out_level = g.out_nodes[0].y
         fig.update_yaxes(range=[out_level+0.5, in_level-0.5])
 
-        # Add connections
+        # Add connections lines between the nodes
+        # * Use a single trace with `None` values separating different lines
+        # * Separate traces may negatively impact reactivity, e.g. to pan & zoom actions
+        x_coords, y_coords = [],[]
         for c in g.connections:
-            x_coords, y_coords = self.get_connection_coords(c)
-            line_trace = go.Scatter(
-                x=x_coords, y=y_coords, mode="lines",
-                line=dict(color="gray", width=1),
-                showlegend=False
-            )
-            fig.add_trace(line_trace, row=1, col=1)
+            xs, ys = self.get_connection_coords(c)
+            if x_coords: x_coords.append(None)
+            if y_coords: y_coords.append(None)
+            x_coords += xs
+            y_coords += ys
+
+        line_trace = go.Scatter(
+            x=x_coords, y=y_coords, mode="lines",
+            line=dict(color="gray", width=1),
+            showlegend=False
+        )
+        fig.add_trace(line_trace, row=1, col=1)
 
         # Add table if selected
         if add_table:
