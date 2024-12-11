@@ -6,41 +6,84 @@ from .tracing import MavTracer
 from .merging import merge_graph_nodes
 from .coloring import color_graph_nodes
 from .layout import layout_graph_nodes
-from .release_viewer import ReleaseViewer
-from .interactive_viewer import InteractiveViewer
+from .figure_renderer import FigureRenderer
+from .widget_renderer import WidgetRenderer
+from IPython.display import display
 
 class MAV:
     def __init__(self, model:nn.Module, inputs:Union[Tensor, Tuple[Tensor]], device=None,
-                 merge_threshold=0.01,
-                 palette:Union[str, List[str]]='large', 
-                 avoid_palette_idxs:Set[int]=set([]), 
-                 fixed_color_map:Dict[str,int]={},
-                 *args, **kwargs):
+                 merge_threshold=0.01):
         self.tracer = MavTracer(model, inputs, device)
         merge_graph_nodes(self.tracer.g, 
                           cumul_param_threshold=merge_threshold)
-        color_graph_nodes(self.tracer.g, 
-                          palette=palette,
-                          avoid_palette_idxs=avoid_palette_idxs, 
-                          fixed_color_map=fixed_color_map)
         layout_graph_nodes(self.tracer.g)
 
+    def render_widget(self,
+                      add_table:bool=True, 
+                      add_slider:bool=True, 
+                      add_overview:bool=False, 
+                      num_levels_displayed:float=10, 
+                      height_px=400,
+                      palette:Union[str, List[str]]='large', 
+                      avoid_palette_idxs:Set[int]=set([]), 
+                      fixed_color_map:Dict[str,int]={},
+                      ) -> widgets.Box: 
+        color_graph_nodes(self.tracer.g, palette=palette,avoid_palette_idxs=avoid_palette_idxs, fixed_color_map=fixed_color_map)
+        return WidgetRenderer(self.tracer.g).render(add_table=add_table, add_slider=add_slider, add_overview=add_overview, 
+                                                    num_levels_displayed=num_levels_displayed, height_px=height_px)
+    
+    def render_figure(self, 
+                      add_table:bool=True, 
+                      add_slider:bool=False, 
+                      num_levels_displayed:float=10,
+                      palette:Union[str, List[str]]='large', 
+                      avoid_palette_idxs:Set[int]=set([]), 
+                      fixed_color_map:Dict[str,int]={},
+                      ) -> go.Figure:
+        color_graph_nodes(self.tracer.g, palette=palette,avoid_palette_idxs=avoid_palette_idxs, fixed_color_map=fixed_color_map)
+        return FigureRenderer(self.tracer.g).render(add_table=add_table, add_slider=add_slider,
+                                                    num_levels_displayed=num_levels_displayed)
+
     @overload
-    def draw_interactive_graph(self,
-                               add_table:bool=True, 
-                               add_slider:bool=True, 
-                               add_overview:bool=False, 
-                               num_levels_displayed:float=10, 
-                               height_px=400
-                               ) -> widgets.Box: ...
-    def draw_interactive_graph(self, *args, **kwargs) -> widgets.Box:
-        return InteractiveViewer(self.tracer.g).draw(*args, **kwargs)
+    def show_widget(self,
+                    add_table:bool=True, 
+                    add_slider:bool=True, 
+                    add_overview:bool=False, 
+                    num_levels_displayed:float=10, 
+                    height_px=400,
+                    palette:Union[str, List[str]]='large', 
+                    avoid_palette_idxs:Set[int]=set([]), 
+                    fixed_color_map:Dict[str,int]={},
+                    ): ...
+    def show_widget(self, *args, **kwargs):
+        widget = self.render_widget(*args, **kwargs)
+        display(widget)
     
     @overload
-    def draw_release_graph(self, 
-                           add_table:bool=True, 
-                           add_slider:bool=False, 
-                           num_levels_displayed:float=10
-                           ) -> go.Figure: ...
-    def draw_release_graph(self, *args, **kwargs) -> go.Figure:
-        return ReleaseViewer(self.tracer.g).draw(*args, **kwargs)
+    def show_figure(self, 
+                    add_table:bool=True, 
+                    add_slider:bool=False, 
+                    num_levels_displayed:float=10,
+                    palette:Union[str, List[str]]='large', 
+                    avoid_palette_idxs:Set[int]=set([]), 
+                    fixed_color_map:Dict[str,int]={},
+                    ): ...
+    def show_figure(self, *args, **kwargs):        
+        fig = self.render_figure(*args, **kwargs)
+        fig.show()
+
+    @overload
+    def export_html(self, 
+                    filename,
+                    offline=False,
+                    add_table:bool=True, 
+                    add_slider:bool=False, 
+                    num_levels_displayed:float=10,
+                    palette:Union[str, List[str]]='large', 
+                    avoid_palette_idxs:Set[int]=set([]), 
+                    fixed_color_map:Dict[str,int]={},
+                    ): ...
+    def export_html(self, filename, offline=False, *args, **kwargs):        
+        fig = self.render_figure(*args, **kwargs)
+        include_plotlyjs = True if offline else 'cdn'
+        fig.write_html(filename, include_plotlyjs=include_plotlyjs)

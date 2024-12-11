@@ -26,7 +26,7 @@ import os
 workspace_path = os.path.abspath('')
 sys.path.append(workspace_path)
 
-from idlmav import MAV, plotly_renderer_context
+from idlmav import MAV, plotly_renderer
 
 import numpy as np
 import torch
@@ -51,15 +51,14 @@ def main():
     x_input = torch.randn(input_size).to(DEVICE)
     v = MAV(model, x_input, device=DEVICE)
     if INTERACTIVE:
-        with plotly_renderer_context('browser'):            
-            container = v.draw_interactive_graph(add_table=ADD_TABLE, add_slider=ADD_SLIDER, add_overview=ADD_OVERVIEW,
+        with plotly_renderer('browser'):            
+            container = v.render_widget(add_table=ADD_TABLE, add_slider=ADD_SLIDER, add_overview=ADD_OVERVIEW,
                                                  num_levels_displayed=NUM_LEVELS_DISPLAYED)
             embed_minimal_html('idlmav.html', views=[container], title='MAV')
     else:
-        with plotly_renderer_context('browser'):
-            fig = v.draw_release_graph(add_table=ADD_TABLE, add_slider=ADD_SLIDER,
-                                       num_levels_displayed=NUM_LEVELS_DISPLAYED)
-            fig.show()
+        with plotly_renderer('browser'):
+            v.show_figure(add_table=ADD_TABLE, add_slider=ADD_SLIDER,
+                          num_levels_displayed=NUM_LEVELS_DISPLAYED)
 
 # ------------------------------------------------------------------------------
 # Models to analyze

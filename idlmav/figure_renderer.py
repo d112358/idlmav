@@ -3,7 +3,7 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-class ReleaseViewer:
+class FigureRenderer:
     """
     This viewer avoids `go.FigureWidget` and `ipywidgets`, making it 
     suitable for use when releasing a model, since users browsing 
@@ -39,7 +39,7 @@ class ReleaseViewer:
         self.params_log_ratio = np.log2(self.params_range[1]) - np.log2(self.params_range[0])
         self.flops_log_ratio = np.log2(self.flops_range[1]) - np.log2(self.flops_range[0])
 
-    def draw(self, add_table:bool=True, add_slider:bool=False, num_levels_displayed:float=10, *args, **kwargs):
+    def render(self, add_table:bool=True, add_slider:bool=False, num_levels_displayed:float=10, *args, **kwargs):
         g = self.g
     
         # Create figure, possibly with subplots

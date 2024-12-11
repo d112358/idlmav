@@ -3,9 +3,9 @@ from .tracing import MavTracer
 from .merging import merge_graph_nodes
 from .coloring import color_graph_nodes
 from .layout import layout_graph_nodes
-from .release_viewer import ReleaseViewer
-from .interactive_viewer import InteractiveViewer
-from .mavutils import available_renderers, plotly_renderer_context
+from .figure_renderer import FigureRenderer
+from .widget_renderer import WidgetRenderer
+from .mavutils import available_renderers, plotly_renderer
 
 __all__ = (
     "MAV", 
@@ -13,10 +13,10 @@ __all__ = (
     "merge_graph_nodes", 
     "color_graph_nodes", 
     "layout_graph_nodes", 
-    "ReleaseViewer", 
-    "InteractiveViewer", 
+    "FigureRenderer", 
+    "WidgetRenderer", 
     "available_renderers", 
-    "plotly_renderer_context"
+    "plotly_renderer"
     )
 
 __version__ = "1.0.0"

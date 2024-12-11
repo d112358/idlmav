@@ -6,12 +6,12 @@ import plotly.callbacks as cb
 import ipywidgets as widgets
 from IPython.display import display, HTML, Javascript
 
-class InteractiveViewer:
+class WidgetRenderer:
     """
     This viewer uses `go.FigureWidget` and other `ipywidgets`, 
     providing more interactions during development. Unfortunately,
     these require a running kernel to display correctly. When
-    uploading a notebook to GitHub, therefore, ReleaseViewer
+    uploading a notebook to GitHub, therefore, FigureRenderer
     is recommended.
 
     Available interactions and limitations:
@@ -70,7 +70,7 @@ class InteractiveViewer:
         self.unique_id = f'{id(self)}_{int(time.time() * 1000)}'
         self.updating_slider = False
 
-    def draw(self, add_table:bool=True, add_slider:bool=True, add_overview:bool=False, num_levels_displayed:float=10, height_px=400, *args, **kwargs) -> widgets.Box:
+    def render(self, add_table:bool=True, add_slider:bool=True, add_overview:bool=False, num_levels_displayed:float=10, height_px=400, *args, **kwargs) -> widgets.Box:
         # Setup parameters
         g = self.g
         initial_y_range = self.fit_range([self.in_level+num_levels_displayed-0.5, self.in_level-0.5], self.full_y_range)
@@ -572,4 +572,4 @@ def append_arc_coords(x, y, cx, cy, r, quadrant, ccw:bool, num_points:int=20):
     x += list(xdata)
     y += list(ydata)
 
-__all__ = ["InteractiveViewer"]
+__all__ = ["WidgetRenderer"]

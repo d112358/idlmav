@@ -1,7 +1,10 @@
 # IDLMAV
 Interactive deep learning model architecture visualization (IDLMAV) is a tool that creates interactive visualizations of model architectures for display in Jupyter notebooks.
 * It does not require a successful forward pass: it can also visualize partial models
-* It can output a release graph with limited interactivity without the need of a running backend/kernel. Release graphs are displayed correctly when viewing GitHub links with [nbviewer](https://nbviewer.org/).
+* It produces three outputs to allow trading off interactivity for portability
+  - An interactive widget with synchronized scrolling and interactions between sub-plots
+  - A figure that still has some interactivity, but displays correctly without the need of a running backend/kernel, e.g. in [nbviewer](https://nbviewer.org/)
+  - Export to a standalone HTML file
 
 # Installation
 
@@ -10,26 +13,27 @@ pip install git+https://github.com/d112358/idlmav.git
 ```
 
 # Usage examples
-## Interactive graph
+## Analyzing the model
 ```python
 import torch, torchvision
-from idlmav import MAV, plotly_renderer_context
-from IPython.display import display
+from idlmav import MAV, plotly_renderer
 device = 'cpu'
 model = torchvision.models.resnet18().to(device)
 x = torch.randn(16,3,160,160).to(device)
 mav = MAV(model, x, device=device)
-with plotly_renderer_context('notebook_connected'):
-    container = mav.draw_interactive_graph(add_overview=True)
-    display(container)
+```
+
+## Interactive graph (go.FigureWidget)
+```python
+with plotly_renderer('notebook_connected'):
+    mav.show_widget(add_overview=True)  
 ```
 ![alt text](images/example_interactive.png)
 
-## Release graph
+## Release mode graph (go.Figure)
 ```python
-with plotly_renderer_context('notebook_connected'):
-    fig = mav.draw_release_graph()
-    fig.show()
+with plotly_renderer('notebook_connected'):
+    mav.show_figure(add_slider=True)
 ```
 ![alt text](images/example_release.png)
 
@@ -37,24 +41,26 @@ with plotly_renderer_context('notebook_connected'):
 * See [Palette options](https://plotly.com/python/discrete-color/#color-sequences-in-plotly-express)
 * The keys to `fixed_color_map` may be a mixture of strings in the **Operation** column and categories as listed [here](https://pytorch.org/docs/stable/nn.html)
 ```python
-mav = MAV(model, x, device=device,
-          palette='Vivid',
-          avoid_palette_idxs=set([10]),
-          fixed_color_map={'Convolution':7, 'add()':0, 'nn.MaxPool2d':5}
-          )
-with plotly_renderer_context('notebook_connected'):
-    container = mav.draw_interactive_graph(add_overview=True)
-    display(container)
+with plotly_renderer('notebook_connected'):
+    mav.show_widget(
+        palette='Vivid',
+        avoid_palette_idxs=set([10]),
+        fixed_color_map={'Convolution':7, 'add()':0, 'nn.MaxPool2d':5}
+    )
 ```
 ![alt text](images/example_user_colors.png)
 
 ## Adding and removing panels
 ```python
-with plotly_renderer_context('notebook_connected'):
-    container = mav.draw_interactive_graph(add_overview=False, add_slider=False, add_table=False)
-    display(container)
+with plotly_renderer('notebook_connected'):
+    mav.show_widget(add_overview=False, add_slider=False, add_table=False)    
 ```
 ![alt text](images/example_panels_off.png)
+
+## Exporting to HTML
+```python
+mav.export_html('resnet18.html')
+```
 
 # Use cases
 * Iteratively designing a model and viewing activations, parameter counts and FLOPS "so far" before the whole model has been defined
@@ -64,7 +70,7 @@ with plotly_renderer_context('notebook_connected'):
 
 # Features
 * Works on incomplete models and models without a successful forward pass
-* Can provide an interactive plot without a running kernel
+* Can provide an interactive plot that does not require a running kernel
 * Customizable color palette and node or category color mappings
 * Graph interactions (interactive graph)
   - Hover over modules to see activation sizes, number of parameters and FLOPS
@@ -88,6 +94,8 @@ with plotly_renderer_context('notebook_connected'):
   - Release graph has no synchronization between panels
 * Inherited from plotly
   - Release graph can only support a horizontal slider
+* Environment-specific limitations
+  - Kaggle currently (Dec 2024) seems to have trouble displaying `go.FigureWidget`, so only the release mode graph is available there
 
 # Planned updates
 * Make the primary direction (down/right/up/left) configurable
