@@ -6,8 +6,8 @@ from .tracing import MavTracer
 from .merging import merge_graph_nodes
 from .coloring import color_graph_nodes
 from .layout import layout_graph_nodes
-from .figure_renderer import FigureRenderer
-from .widget_renderer import WidgetRenderer
+from .renderers.figure_renderer import FigureRenderer
+from .renderers.widget_renderer import WidgetRenderer
 from IPython.display import display
 
 class MAV:

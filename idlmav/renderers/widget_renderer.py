@@ -1,4 +1,5 @@
-from .mavtypes import MavNode, MavGraph, MavConnection
+from ..mavtypes import MavNode, MavGraph, MavConnection
+from .renderer_utils import use_straight_connection, segmented_line_coords
 import time
 import numpy as np
 import plotly.graph_objects as go
@@ -105,7 +106,7 @@ class WidgetRenderer:
                 color='rgba(0,0,0,0.1)',
                 line=dict(color='black', width=3)
             ),
-            hovertemplate='<extra></extra>', showlegend=False
+            hoverinfo='skip', showlegend=False
         )
         self.main_fig.add_trace(sel_marker)
         self.sel_marker_idx = len(self.main_fig.data)-1
@@ -127,6 +128,7 @@ class WidgetRenderer:
         line_trace = go.Scatter(
             x=x_coords, y=y_coords, mode="lines",
             line=dict(color="gray", width=1),
+            hoverinfo='skip',
             showlegend=False
         )
         self.main_fig.add_trace(line_trace)
@@ -202,7 +204,7 @@ class WidgetRenderer:
                     color=[self.get_node_color(n) for n in g.nodes],
                     colorscale='Bluered'
                 ),
-                hovertemplate='%{customdata[0]}<extra></extra>',
+                hovertemplate='<extra></extra>',
                 customdata=[self.node_data(n) for n in g.nodes],
                 showlegend=False
             )
@@ -219,7 +221,7 @@ class WidgetRenderer:
                 line=dict(color="#3d6399", width=1),
                 fillcolor='rgba(112,133,161,0.25)',
                 hoveron='points',
-                hovertemplate='<extra></extra>',
+                hoverinfo='skip',
                 showlegend=False
             )
             self.overview_fig.add_trace(rect_trace)
@@ -257,7 +259,7 @@ class WidgetRenderer:
         # Restrict actions on plots
         # self.main_fig.update_layout(config=dict(displayModeBar=False))
         # [ "autoScale2d", "autoscale", "editInChartStudio", "editinchartstudio", "hoverCompareCartesian", "hovercompare", "lasso", "lasso2d", "orbitRotation", "orbitrotation", "pan", "pan2d", "pan3d", "reset", "resetCameraDefault3d", "resetCameraLastSave3d", "resetGeo", "resetSankeyGroup", "resetScale2d", "resetViewMap", "resetViewMapbox", "resetViews", "resetcameradefault", "resetcameralastsave", "resetsankeygroup", "resetscale", "resetview", "resetviews", "select", "select2d", "sendDataToCloud", "senddatatocloud", "tableRotation", "tablerotation", "toImage", "toggleHover", "toggleSpikelines", "togglehover", "togglespikelines", "toimage", "zoom", "zoom2d", "zoom3d", "zoomIn2d", "zoomInGeo", "zoomInMap", "zoomInMapbox", "zoomOut2d", "zoomOutGeo", "zoomOutMap", "zoomOutMapbox", "zoomin", "zoomout"]
-        self.main_fig.update_layout(modebar_remove=["toimage", "resetscale", "select", "lasso", "reset"])
+        self.main_fig.update_layout(modebar=dict(remove=["select", "lasso"], orientation="v"))
         self.main_fig.layout.dragmode = 'zoom'
         if self.overview_fig:
             self.overview_fig.update_layout(modebar_remove=["toimage", "autoscale", "select", "lasso", "pan", "reset", "resetscale", "zoom", "zoomin", "zoomout"])
@@ -500,8 +502,6 @@ class WidgetRenderer:
         self.autoscroll_table()
 
     def get_connection_coords(self, c:MavConnection):
-        # TODO: Update all connection coords functions when supporting horizontal main direction
-        # TODO: Move all connection coords functions to base class to share with other viewers
         if use_straight_connection(c, self.g):
             return [c.from_node.x, c.to_node.x], [c.from_node.y, c.to_node.y]
         else:
@@ -509,67 +509,3 @@ class WidgetRenderer:
             # at others, especially when the vertical dimension is zoomed out.
             # The segmented lines are more consistent and use fewer points.
             return segmented_line_coords(c.from_node.x, c.from_node.y, c.to_node.y)
-        
-def segmented_line_coords(x01, y0, y1):
-    """
-    `segmented_line_coords` returns the x and y coordinates for a
-    segmented line that connects two nodes on the same horizontal
-    coordinate `x01` and different vertical coordinates `y0` and 
-    `y1`. This is an alternative to `curved_line_coords`.
-    """
-    r=0.2
-    ymin, ymax = min([y0,y1]), max([y0,y1])
-    x = [x01,  x01+2*r,  x01+2*r,  x01]
-    y = [ymin, ymin+2*r, ymax-2*r, ymax]
-    return x, y
-
-def use_straight_connection(c:MavConnection, g:MavGraph):
-    n0, n1 = c.from_node, c.to_node
-    x0, y0, x1, y1 = n0.x, n0.y, n1.x, n1.y
-    if x0 != x1: return True  # Use straght lines unless vertical and obstructed by another node
-    nodes_on_line = [n for n in g.nodes if n.x == x0]  # First just perform one check on all nodes
-    nodes_on_segment = [n for n in nodes_on_line if n.y > y0 and n.y < y1]  # Perform other 2 checks on subset of nodes
-    return False if nodes_on_segment else True
-        
-def curved_line_coords(x01, y0, y1):
-    """
-    `curved_line_coords` return the x and y coordinates for a 
-    curved line that connects two nodes on the same horizontal
-    coordinate `x01` and different vertical coordinates `y0` and `y1`
-    """
-    r = 0.2
-    ymin, ymax = min([y0,y1]), max([y0,y1])
-    x, y = [], []
-    append_arc_coords(x, y, x01+r, ymin, r, 3, True)
-    append_arc_coords(x, y, x01+r, ymin+2*r, r, 1, False)
-    append_arc_coords(x, y, x01+r, ymax-2*r, r, 4, False)
-    append_arc_coords(x, y, x01+r, ymax, r, 2, True)
-    return x, y
-
-def append_arc_coords(x, y, cx, cy, r, quadrant, ccw:bool, num_points:int=20):
-    """
-    `append_arc_coords` appends x and y-coordinates for the 
-    specified arc to the existing lists of coordinates `x` and `y`.
-
-    The appended arc is always a quarter-circle and is defined by
-    the centre `cx`, `cy` and radius `r` of the circle, the 
-    quadrant `quadrant` for which to return coordinates, the
-    boolean flag `ccw` specifying whether to sort the coordinates
-    in counter-clockwise order and the number of points 
-    `num_points` into which the arc should be divided.
-
-    Quadrants are numbered as follows:
-        2=TopLeft       |    1=TopRight
-        ----------------------------------
-        3=BottomLeft    |    4=BottomRight
-    """
-    if ccw:
-        t = np.linspace(np.pi/2*(quadrant-1), np.pi/2*quadrant, num_points)
-    else:
-        t = np.linspace(np.pi/2*quadrant, np.pi/2*(quadrant-1), num_points)
-    xdata = cx + r*np.cos(t)
-    ydata = cy - r*np.sin(t)  # Negative because y-axis is inverted on graph
-    x += list(xdata)
-    y += list(ydata)
-
-__all__ = ["WidgetRenderer"]
