@@ -13,6 +13,7 @@ dependencies = [
   "munkres",
   "plotly",
   "nbformat",
+  "ipywidgets"
 ]
 requires-python = ">= 3.9"
 authors = [
@@ -35,7 +36,7 @@ Repository = "https://github.com/d112358/idlmav.git"
 "Bug Tracker" = "https://github.com/d112358/idlmav/issues"
 
 [tool.setuptools]
-packages = ["idlmav"]
+packages = ["idlmav","idlmav.renderers"]
 
 [tool.setuptools.dynamic]
 version = {attr = "idlmav.__version__"}

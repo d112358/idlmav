@@ -15,7 +15,7 @@ Interactive deep learning model architecture visualization (IDLMAV) is a tool th
 # Installation
 
 ```
-pip install git+https://github.com/d112358/idlmav.git
+pip install idlmav
 ```
 
 # Usage examples
@@ -39,7 +39,7 @@ mav = MAV(model, x, device=device)
 with plotly_renderer('notebook_connected'):
     mav.show_figure(add_slider=True)
 ```
-![Portable figure](images/portable_figure.png)
+![Portable figure](https://github.com/d112358/idlmav/raw/main/images/portable_figure.png)
 
 ## Interactive widget
 * Based on [ipywidgets](https://ipywidgets.readthedocs.io/en/latest/) and [plotly.graph_objects.FigureWidget](https://plotly.com/python/figurewidget/)
@@ -51,7 +51,7 @@ with plotly_renderer('notebook_connected'):
 with plotly_renderer('notebook_connected'):
     mav.show_widget(add_overview=True)
 ```
-![Interactive widget](images/interactive_widget.png)
+![Interactive widget](https://github.com/d112358/idlmav/raw/main/images/interactive_widget.png)
 
 ## HTML export
 * Most portable option
@@ -75,7 +75,7 @@ with plotly_renderer('notebook_connected'):
         fixed_color_map={'Convolution':7, 'add()':0, 'nn.MaxPool2d':5}
     )
 ```
-![Specifying colors](images/specifying_colors.png)
+![Specifying colors](https://github.com/d112358/idlmav/raw/main/images/specifying_colors.png)
 
 ## Adding and removing panels
 * This could help with portability or user experience on some environments, e.g.
@@ -85,7 +85,7 @@ with plotly_renderer('notebook_connected'):
 with plotly_renderer('notebook_connected'):
     mav.show_widget(add_overview=False, add_slider=False, add_table=False)    
 ```
-![Adding and removing panels](images/removing_panels.png)
+![Adding and removing panels](https://github.com/d112358/idlmav/raw/main/images/removing_panels.png)
 
 ## Modifying merging behaviour
 * `merge_threshold<0` does not perform any merging
@@ -105,7 +105,7 @@ with plotly_renderer('notebook_connected'):
         fixed_color_map={'Convolution':7, 'add()':0, 'nn.MaxPool2d':5}
     )
 ```
-![Modifying merging behaviour](images/modifying_merging_behaviour.png)
+![Modifying merging behaviour](https://github.com/d112358/idlmav/raw/main/images/modifying_merging_behaviour.png)
 
 ## Calling internal components directly
 * For users that wish to replace or augment one or more components
@@ -121,7 +121,7 @@ color_graph_nodes(tracer.g)
 renderer = WidgetRenderer(tracer.g)
 display(renderer.render())
 ```
-![Calling internal components directly](images/calling_internal_components_directly.png)
+![Calling internal components directly](https://github.com/d112358/idlmav/raw/main/images/calling_internal_components_directly.png)
 
 # Features
 * Works on incomplete models and models without a successful forward pass
@@ -161,14 +161,14 @@ display(renderer.render())
 
 # Contributing
 Any contributions are welcome, but custom renderers to improve the user experience on specific platforms / environments will be especially appreciated!
-* The development environment is described in [setup_vscode_wsl.ipynb](./environments/setup_vscode_wsl.ipynb)
+* The development environment is described in [setup_vscode_wsl.ipynb](https://github.com/d112358/idlmav/blob/main/environments/setup_vscode_wsl.ipynb)
   - This should be easy to get going in native Linux as well, just skipping the WSL parts
-* The build is described in and executed from [build_steps.ipynb](./environments/build_steps.ipynb)
+* The build is described in and executed from [build_steps.ipynb](https://github.com/d112358/idlmav/blob/main/environments/build_steps.ipynb)
 * Unit tests still need to be developed. At the moment, the following notebooks are used for manual / visual testing:
-  - [02_test_layout.ipynb](./nbs/02_test_layout.ipynb)  
-  - [06_test_rendering.ipynb](./nbs/06_test_rendering.ipynb)  
-  - [10_test_tracing.ipynb](./nbs/10_test_tracing.ipynb)  
-  - [12_test_idlmav.ipynb](./nbs/12_test_idlmav.ipynb)  
+  - [02_test_layout.ipynb](https://github.com/d112358/idlmav/blob/main/nbs/02_test_layout.ipynb)  
+  - [06_test_rendering.ipynb](https://github.com/d112358/idlmav/blob/main/nbs/06_test_rendering.ipynb)  
+  - [10_test_tracing.ipynb](https://github.com/d112358/idlmav/blob/main/nbs/10_test_tracing.ipynb)  
+  - [12_test_idlmav.ipynb](https://github.com/d112358/idlmav/blob/main/nbs/12_test_idlmav.ipynb)  
 
 # License
-This repository is released under the MIT license. See [LICENSE](LICENSE) for additional details.
+This repository is released under the MIT license. See [LICENSE](https://github.com/d112358/idlmav/blob/main/LICENSE) for additional details.
