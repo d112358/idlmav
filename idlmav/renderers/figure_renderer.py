@@ -212,4 +212,5 @@ class FigureRenderer:
             # The curved lines display nicely at some levels of zoom, but look awkward
             # at others, especially when the vertical dimension is zoomed out.
             # The segmented lines are more consistent and use fewer points.
-            return segmented_line_coords(c.from_node.x, c.from_node.y, c.to_node.y)
+            offset = c.offset if c.offset is not None else 0.4
+            return segmented_line_coords(c.from_node.x, c.from_node.y, c.to_node.y, offset)

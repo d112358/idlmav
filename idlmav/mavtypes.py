@@ -25,6 +25,7 @@ class MavNode:
 class MavConnection:
     def __init__(self, from_node:MavNode, to_node:MavNode):
         self.from_node, self.to_node = from_node, to_node
+        self.offset = None  # Used for drawing skip connections around multiple nodes in a straight line
 
 class MavGraph:
     def __init__(self, nodes:List[MavNode], connections:List[MavConnection]):

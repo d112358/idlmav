@@ -1,8 +1,9 @@
-from .mavtypes import MavNode, MavGraph
+from .mavtypes import MavNode, MavGraph, MavConnection
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import patches, lines
 import plotly.graph_objects as go
+from .renderers.figure_renderer import use_straight_connection
 
 class ArcViewer:
     """
@@ -208,3 +209,88 @@ class PlotlyViewer:
         
         return fig
 
+
+class SemiCircleViewer:
+    """
+    Draws all connections as semi-circles. Useful for visualizing
+    skip connections between nodes in a straight line. 
+    Tooltips available on hover, but not other interaction
+    """
+    def __init__(self, g:MavGraph):
+        self.g = g
+
+    def draw(self, fig_size=300):
+        g = self.g
+    
+        # Draw nodes
+        fig = go.Figure(
+            data=go.Scatter(
+                x=[n.x for n in g.nodes], 
+                y=[n.y for n in g.nodes], 
+                mode='markers', 
+                marker=dict(
+                    size=[1+3*np.log10(n.params) for n in g.nodes],
+                    color=[np.log10(n.flops) for n in g.nodes],
+                    colorscale='Bluered'
+                ),
+                hovertemplate=(
+                    'Name: %{customdata[0]}<br>' +
+                    'Activations: %{customdata[1]}<br>' +
+                    'Parameters: %{customdata[2]}<br>' +
+                    'FLOPS: %{customdata[3]}'
+                ),
+                customdata=[(n.name, n.activations, n.params, n.flops) for n in g.nodes],
+                showlegend=False
+            ),
+            layout=go.Layout(
+                xaxis=dict(title=None),
+                yaxis=dict(title=None),
+                title=None,
+                width=fig_size,
+                height=fig_size,
+            )
+        )
+        fig.update_xaxes(showgrid=False, zeroline=False, tickmode='array', tickvals=[])
+        fig.update_yaxes(showgrid=False, zeroline=False, tickmode='array', tickvals=[])
+
+        # Display direction
+        in_level = min([n.y for n in g.nodes])
+        out_level = max([n.y for n in g.nodes])
+        fig.update_yaxes(range=[out_level+0.5, in_level-0.5])
+
+        # Add connections
+        for ci,c in enumerate(g.connections):
+            xs, ys = self.get_connection_coords(c)
+
+            line_trace = go.Scatter(
+                x=xs, y=ys, mode="lines",
+                line=dict(color="gray", width=1),            
+                hoverinfo='skip',
+                hovertemplate=
+                    f'Connection {ci}<br>' +
+                    f'Nodes: {c.from_node.name}-{c.to_node.name}<br>' +
+                    '<extra></extra>',
+                showlegend=False
+            )
+            fig.add_trace(line_trace)
+        fig.update_layout(margin=dict(l=0, r=0, t=0, b=0))
+        fig.update_layout(modebar=dict(remove=["toimage", "select", "lasso", "zoomin", "zoomout"], orientation="v"))
+        
+        return fig
+    
+    def get_connection_coords(self, c:MavConnection):
+        cx = (c.from_node.x + c.to_node.x)/2 
+        cy = (c.from_node.y + c.to_node.y)/2   
+        if use_straight_connection(c, self.g):
+            return [c.from_node.x, cx, c.to_node.x], [c.from_node.y, cy, c.to_node.y]
+        num_points = 20  # Number of points per arc
+        r = (c.to_node.y - c.from_node.y)/2  # Arc radius
+        t = np.linspace(-np.pi/2, np.pi/2, num_points)
+  
+        if c.offset < 0:
+            xdata = cx - r*np.cos(t)
+            ydata = cy - r*np.sin(t)  # Negative because y-axis is inverted on graph
+        else:
+            xdata = cx + r*np.cos(t)
+            ydata = cy - r*np.sin(t)  # Negative because y-axis is inverted on graph
+        return list(xdata), list(ydata)

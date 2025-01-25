@@ -21,17 +21,17 @@ def use_straight_connection(c:MavConnection, g:MavGraph):
     nodes_on_segment = [n for n in nodes_on_line if n.y > y0 and n.y < y1]  # Perform other 2 checks on subset of nodes
     return False if nodes_on_segment else True
         
-def segmented_line_coords(x01, y0, y1):
+def segmented_line_coords(x01, y0, y1, offset=0.4):
     """
     `segmented_line_coords` returns the x and y coordinates for a
     segmented line that connects two nodes on the same horizontal
     coordinate `x01` and different vertical coordinates `y0` and 
     `y1`. This is an alternative to `curved_line_coords`.
     """
-    r=0.2
     ymin, ymax = min([y0,y1]), max([y0,y1])
-    x = [x01,  x01+2*r,  x01+2*r,  x01]
-    y = [ymin, ymin+2*r, ymax-2*r, ymax]
+    dy = min((ymax-ymin)*0.3, 0.5)
+    x = [x01,  x01+offset,  x01+offset,  x01]
+    y = [ymin, ymin+dy, ymax-dy, ymax]
     return x, y
 
 def curved_line_coords(x01, y0, y1):

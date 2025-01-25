@@ -1,5 +1,6 @@
 from .mavtypes import MavNode, MavConnection, MavGraph
-from typing import List, Tuple
+from typing import List, Tuple, Set, Mapping
+from numpy.typing import NDArray
 import numpy as np
 import itertools
 from collections import deque
@@ -156,9 +157,163 @@ class MavLayout():
                     print(f'xs={xs}')
                     print('')
         return xs, total_cost
+    
+class SkipConnectionOffsetCalc():
+    """
+    Calculate appropriate offsets for skip connections between multiple nodes in a straight line.
+    See [13_layout_skip_connections.ipynb](../nbs/13_layout_skip_connections.ipynb) for a
+    description of the algorithm
+    """
+    def __init__(self, graph:MavGraph):
+        self.g = graph
+        self.levels:Mapping[float,int] = {}  # Map from the connecion y-value to the level index
+        self.skip_connections:List[MavConnection] = []  # List of skip connections in column currently being processed
+        self.A:NDArray = None   # Potential overlap matrix. A[i,j] is the number of intersections if connection j is placed outside connection i
+        self.B:NDArray = None   # Copy of Potential overlap matrix gradually set to zero as connections are placed
+        self.C:NDArray = None   # Collision avoidance matrix. C[i,j] is non-zero if a connection already passes the i'th level in the j'th column
+        self.calc_offsets()
+        
+    def calc_offsets(self):
+        xs = list(set([n.x for n in self.g.nodes]))
+        for x in xs: self.calc_offsets_for_column(x)
 
-def layout_graph_nodes(g:MavGraph, *args, **kwargs):
-    layout = MavLayout(g, *args, **kwargs)
+    def calc_offsets_for_column(self, x:int):
+        self.init_level_mappings(x)
+        self.skip_connections = [c for c in self.g.connections if c.from_node.x == x and c.to_node.x == x and self.is_skip_connection(c)]
+        if not self.skip_connections: return
+        self.step1_calc_potential_overlap_matrix()
+        left_idxs, right_idxs = self.step2_assign_connections_to_sides()
+        self.step3_calc_offsets(left_idxs, right_idxs)
+
+    def init_level_mappings(self, x:int):
+        ys = [n.y for n in self.g.nodes if n.x == x]
+        ys = sorted(list(set(ys)))  # Extract unique values and sort
+        self.levels = {y:yi for yi,y in enumerate(ys)}
+
+    def is_skip_connection(self, c:MavConnection):
+        n0, n1 = c.from_node, c.to_node
+        x0, y0, x1, y1 = n0.x, n0.y, n1.x, n1.y
+        if x0 != x1: return False 
+        nodes_on_line = [n for n in self.g.nodes if n.x == x0]  # Perform 1st check on all nodes
+        nodes_on_segment = [n for n in nodes_on_line if n.y > y0 and n.y < y1]  # Perform 2nd and 3rd checks on subset of nodes
+        return True if nodes_on_segment else False
+
+    def step1_calc_potential_overlap_matrix(self):
+        # Step 1 in 13_layout_skip_connections.ipynb
+        num_skip_connections = len(self.skip_connections)
+        self.A = np.zeros((num_skip_connections, num_skip_connections))
+        for i0,c0 in enumerate(self.skip_connections):
+            y0_from, y0_to = c0.from_node.y, c0.to_node.y
+            for i1,c1 in enumerate(self.skip_connections):
+                if i1==i0: continue
+                y1_from, y1_to = c1.from_node.y, c1.to_node.y
+                if y1_from > y0_from and y1_from < y0_to: self.A[i0,i1] += 1
+                if y1_to > y0_from and y1_to < y0_to: self.A[i0,i1] += 1
+    
+    def step2_assign_connections_to_sides(self) -> Tuple[List[int], List[int]]:
+        # Step 2 in 13_layout_skip_connections.ipynb
+        num_skip_connections = len(self.skip_connections)
+        A1 = self.A.copy()
+        A1[A1==2] = 0  # Consider only 1's
+        AL = np.zeros(self.A.shape)
+        AR = np.zeros(self.A.shape)
+        left_idxs:List[int] = []
+        right_idxs:List[int] = []
+        unassigned_idxs = set([i for i in range(num_skip_connections)])
+        
+        col_sums = A1.sum(axis=0)
+        idx = col_sums.argmax()
+        self.step2_assign(idx, False, A1, AL, AR, left_idxs, right_idxs, unassigned_idxs)
+        while unassigned_idxs:
+            cost_diffs = AR.sum(axis=0) - AL.sum(axis=0)
+            abs_cost_diffs:NDArray = np.abs(cost_diffs)
+            abs_cost_diffs[left_idxs + right_idxs] = -1
+            idx = abs_cost_diffs.argmax()  # TODO: tie-break on smallest total column sum in A??
+            to_right = cost_diffs[idx] <= 0
+            self.step2_assign(idx, to_right, A1, AL, AR, left_idxs, right_idxs, unassigned_idxs)
+
+        for idx in left_idxs: self.skip_connections[idx].offset = -1
+        for idx in right_idxs: self.skip_connections[idx].offset = 1
+
+        return left_idxs, right_idxs
+    
+    def step2_assign(self, idx:int, to_right:bool, A1:NDArray, AL:NDArray, AR:NDArray, left_idxs:List[int], right_idxs:List[int], unassigned_idxs:Set[int]):
+        if to_right:
+            AR[idx,:] = A1[idx,:]
+            left_idxs.append(idx)
+        else:
+            AL[idx,:] = A1[idx,:]
+            right_idxs.append(idx)
+        unassigned_idxs.remove(idx)
+
+    def step3_calc_offsets(self, left_idxs:List[int], right_idxs:List[int]):
+        # Step 3 in 13_layout_skip_connections.ipynb
+        for side in range(2):
+            if side==0:
+                side_connections = [self.skip_connections[i] for i in left_idxs]
+                self.B = self.A.copy()[left_idxs,:][:,left_idxs]
+                side_factor = -1
+            else:
+                side_connections = [self.skip_connections[i] for i in right_idxs]
+                self.B = self.A.copy()[right_idxs,:][:,right_idxs]
+                side_factor = 1
+            num_side_connections = len(side_connections)
+            max_level = max([self.levels[c.to_node.y] for c in side_connections])
+            self.C = np.zeros((max_level+1,1))
+
+            placed_idxs:List[int] = []
+            unplaced_idxs = set([i for i in range(num_side_connections)])
+            while unplaced_idxs:
+                idx = self.step3_get_idx_to_place(placed_idxs)
+                self.step3_place(placed_idxs, unplaced_idxs, idx, side_connections[idx], side_factor)
+
+        # Normalize
+        max_abs_offset = max([abs(c.offset) for c in self.skip_connections])
+        scale_factor = 0.4 / max_abs_offset
+        for c in self.skip_connections: c.offset = c.offset*scale_factor
+
+    def step3_ensure_C_width(self, w:int):
+        if self.C.shape[1] >= w: return
+        self.C = np.append(self.C, np.zeros((self.C.shape[0], w-self.C.shape[1])), axis=1)
+
+    def step3_get_idx_to_place(self, placed_idxs:List[int]):
+        # Check for any unplaced index with a zero row sum
+        row_sums = self.B.sum(axis=1)
+        row_sums[placed_idxs] = 999999
+        zero_row_sum_idxs = (row_sums==0).nonzero()[0]
+        if len(zero_row_sum_idxs) > 0: return zero_row_sum_idxs[0]
+
+        # Check for any index with 2's in columns, but not in rows
+        # * Placed indices are already zeroed out
+        col_2_counts = (self.B==2).sum(axis=0)
+        row_2_counts = (self.B==2).sum(axis=0)
+        diff_2_counts = col_2_counts - row_2_counts
+        diff_2_counts[row_2_counts > 0] = 0
+        diff_2_counts[placed_idxs] = 0
+        if (diff_2_counts>0).any(): return diff_2_counts.argmax()
+
+        # If this point is reached, place the unplaced connection with the lowest row sum
+        return row_sums.argmin()
+
+    def step3_place(self, placed_idxs:List[int], unplaced_idxs:Set[int], idx:int, c:MavConnection, side_factor):
+        y0, y1 = self.levels[c.from_node.y], self.levels[c.to_node.y]
+        x = 0  # Offset at which to place connection
+        self.step3_ensure_C_width(x+1)
+        occupied = self.C[y0:y1,:].any()
+        while occupied:
+            x += 1
+            self.step3_ensure_C_width(x+1)
+            occupied = self.C[y0:y1,x].any()
+        self.B[idx,:] = 0
+        self.B[:,idx] = 0
+        self.C[y0:y1,x] = 1
+        c.offset = side_factor * (x+1)  # side_factor if -1 for left or +1 for right hand side
+        placed_idxs.append(idx)
+        unplaced_idxs.remove(idx)
+
+def layout_graph_nodes(g:MavGraph):
+    layout = MavLayout(g)
+    skip_calc = SkipConnectionOffsetCalc(g)
 
 def create_random_sample_graph(nodes_per_level, num_connections, rep_prob_decay=0.1, skip_prob_decay=0.1):
     """
