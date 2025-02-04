@@ -1,3 +1,7 @@
 {
-    "pylint.args": ["\"--generated-members\", \"torch.*\""]
+    "pylint.args": [
+        "\"--generated-members\", \"torch.*\""
+    ],
+    "jupyter.debugJustMyCode": false,
+    "debugpy.debugJustMyCode": false
 }

@@ -37,8 +37,8 @@ class FigureRenderer:
         pos_flops = [v for v in all_flops if v > 0]        
         self.params_range = [min(pos_params), max(pos_params)] if pos_params else [0,0]
         self.flops_range = [min(pos_flops), max(pos_flops)] if pos_flops else [0,0]
-        self.params_log_ratio = np.log2(self.params_range[1]) - np.log2(self.params_range[0])
-        self.flops_log_ratio = np.log2(self.flops_range[1]) - np.log2(self.flops_range[0])
+        self.params_log_ratio = np.log2(self.params_range[1]) - np.log2(self.params_range[0]) if pos_params else None
+        self.flops_log_ratio = np.log2(self.flops_range[1]) - np.log2(self.flops_range[0]) if pos_flops else None
 
     def render(self, add_table:bool=True, add_slider:bool=False, num_levels_displayed:float=10, *args, **kwargs):
         g = self.g
@@ -108,16 +108,16 @@ class FigureRenderer:
         if add_table:
             table_trace = go.Table(
                 header=dict(
-                    values=['Name', 'Operation', 'Activations', 'Params', 'FLOPS'],
+                    values=self.column_headings(),
                     font=dict(size=10),
                     align="left"
                 ),
                 cells=dict(
                     values=[[n.name for n in g.nodes], 
                             [n.operation for n in g.nodes], 
-                            [n.activations for n in g.nodes], 
-                            [n.params for n in g.nodes], 
-                            [n.flops for n in g.nodes]],
+                            [self.fmt_activ(n.activations) for n in g.nodes], 
+                            [self.fmt_large(n.params) for n in g.nodes], 
+                            [self.fmt_large(n.flops) for n in g.nodes]],
                     align = "left")
             )
             fig.add_trace(table_trace, row=1, col=2)
@@ -153,10 +153,18 @@ class FigureRenderer:
         return fig
     
     def column_headings(self):
-        return ('Name', 'Operation', 'Activations', 'Params', 'FLOPS')
+        total_params = sum([n.params for n in self.g.nodes])
+        total_flops = sum([n.flops for n in self.g.nodes])
+        return ('Name', 'Operation', 'Activations', f'Params [{self.fmt_large(total_params)}]', f'FLOPS [{self.fmt_large(total_flops)}]')
+    
+    def fmt_large(self, large_value):
+        return f'{large_value:,}'.replace(',', ' ')
+
+    def fmt_activ(self, activations):
+        return f"({','.join(map(str, activations))})"
 
     def node_data(self, n:MavNode):
-        return (n.name, n.operation, n.activations, n.params, n.flops)
+        return (n.name, n.operation, self.fmt_activ(n.activations), self.fmt_large(n.params), self.fmt_large(n.flops))
 
     def params_to_norm_val(self, params):
         """
@@ -168,7 +176,7 @@ class FigureRenderer:
         # * Early exit: If the largest node does not even 1.007 times the 
         #   number of params than that of the smallest node, just give them 
         #   all the same value to stay clear of small denominators
-        if self.params_log_ratio < 0.01: return 0.5
+        if self.params_log_ratio is None or self.params_log_ratio < 0.01: return 0.5
         v = np.clip(params, self.params_range[0], self.params_range[1])
         v_norm = (np.log2(v) - np.log2(self.params_range[0])) / self.params_log_ratio  # Scaled to between 0 and 1
         return v_norm
@@ -187,9 +195,9 @@ class FigureRenderer:
         # * Early exit: If the largest node does not even 1.007 times the 
         #   number of FLOPS than that of the smallest node, just give them 
         #   all the same value to stay clear of small denominators
-        if self.flops_log_ratio < 0.01: return 0.5
+        if self.flops_log_ratio is None or self.flops_log_ratio < 0.01: return 0.5
         v = np.clip(flops, self.flops_range[0], self.flops_range[1])
-        v_norm = (np.log2(v) - np.log2(self.params_range[0])) / self.flops_log_ratio 
+        v_norm = (np.log2(v) - np.log2(self.flops_range[0])) / self.flops_log_ratio 
         return v_norm
 
     def flops_to_dot_size(self, flops):

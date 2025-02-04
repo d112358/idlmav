@@ -14,7 +14,13 @@
             "env": {
                 "DISPLAY":"${input:ipAddr}:0.0",
                 "BROWSER":"firefox-wrapper"
-            }
+            },
+            "pathMappings": [
+                {
+                    "localRoot": "${workspaceFolder}",
+                    "remoteRoot": "${workspaceFolder}"
+                }
+            ],
         }, {
             "name": "Python Debugger: run_idlmav.py",
             "type": "debugpy",

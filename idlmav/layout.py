@@ -257,6 +257,7 @@ class SkipConnectionOffsetCalc():
                 side_connections = [self.skip_connections[i] for i in right_idxs]
                 self.B = self.A.copy()[right_idxs,:][:,right_idxs]
                 side_factor = 1
+            if not side_connections: continue
             num_side_connections = len(side_connections)
             max_level = max([self.levels[c.to_node.y] for c in side_connections])
             self.C = np.zeros((max_level+1,1))
