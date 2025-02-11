@@ -27,8 +27,10 @@ class MavLayout():
         # * For each permutation, use the Hungarian method (via munkres library) to
         #   iteratively determine the best placement of top-level nodes on the levels 
         #   before and after this level
+        max_num_permutations = 1000
         xs = [i-(largest_level_len-1)//2 for i in range(largest_level_len)]
         xs_perms = list(itertools.permutations(xs))
+        if len(xs_perms) > max_num_permutations: xs_perms = random.sample(xs_perms, max_num_permutations)
         num_xs_perms = len(xs_perms)
         total_costs = [None] * num_xs_perms
         xdata = np.zeros((num_xs_perms, len(self.g.top_level_nodes)))
