@@ -1,5 +1,6 @@
 from .mavtypes import MavNode, MavConnection, MavGraph
-from typing import Any, Dict, List, Tuple, Union, Set
+from .mavutils import to_device
+from typing import Any, Dict, List, Tuple, Set, Optional, Mapping
 import warnings
 import torch
 from torch import nn, fx, Tensor
@@ -61,13 +62,11 @@ class ShapeMacInterpreter(fx.Interpreter):
         return result
         
 class MavTracer:
-    def __init__(self, model:nn.Module, inputs:Union[Tensor, Tuple[Tensor]], device=None):
+    def __init__(self, model:nn.Module, inputs:Any, device=None,
+                 concrete_args: Optional[Dict[str, Any]]=None):
         if device:
             self.model = model.to(device)
-            if isinstance(inputs, Tensor):
-                self.inputs = inputs.to(device)
-            else:
-                self.inputs = tuple(i.to(device) for i in inputs)
+            self.inputs = to_device(inputs, device)
         else:
             self.model = model
             self.inputs = inputs
@@ -77,12 +76,12 @@ class MavTracer:
         self.param_counts : Dict[fx.Node, int] = {}
         self.target_names : Dict[fx.Node,str] = {}
         self.err_node: fx.Node = None
-        self.run()
+        self.run(concrete_args)
         self.build_graph()
 
-    def run(self):
+    def run(self, concrete_args: Optional[Dict[str, Any]]=None):
         # 1st pass: symbolic tracing using torch.fx
-        self.gm = fx.symbolic_trace(self.model)
+        self.gm = fx.symbolic_trace(self.model, concrete_args)
         self.interp = ShapeMacInterpreter(self.gm)
 
         # 2nd pass: iterate through `nn.Module` and update module types and parameter counts
@@ -100,7 +99,12 @@ class MavTracer:
 
         # 3rd pass: forward pass using torch.fx.Interpreter
         try:
-            self.interp.run(self.inputs)
+            if isinstance(self.inputs, Mapping):
+                self.interp.run(**self.inputs)
+            elif isinstance(self.inputs, Tuple):
+                self.interp.run(*self.inputs)
+            else:
+                self.interp.run(self.inputs)
         except Exception as e:
             msg = 'Forward pass failed.'
             n1 = self.interp.last_successful_node

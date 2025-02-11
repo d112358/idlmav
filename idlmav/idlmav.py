@@ -1,4 +1,4 @@
-from typing import Tuple, List, Dict, Set, Union, overload
+from typing import Tuple, List, Dict, Set, Union, Optional, Any, overload
 from torch import nn, Tensor
 import plotly.graph_objects as go
 import ipywidgets as widgets
@@ -12,8 +12,9 @@ from IPython.display import display
 
 class MAV:
     def __init__(self, model:nn.Module, inputs:Union[Tensor, Tuple[Tensor]], device=None,
-                 merge_threshold=0.01):
-        self.tracer = MavTracer(model, inputs, device)
+                 merge_threshold=0.01,
+                 concrete_args: Optional[Dict[str, Any]] = None):
+        self.tracer = MavTracer(model, inputs, device, concrete_args)
         merge_graph_nodes(self.tracer.g, 
                           cumul_param_threshold=merge_threshold)
         layout_graph_nodes(self.tracer.g)
