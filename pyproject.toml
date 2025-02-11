@@ -9,7 +9,6 @@ dependencies = [
   "torch>=2.3.0",
   "numpy",
   "tabulate",
-  "torchprofile",
   "munkres",
   "plotly",
   "nbformat",

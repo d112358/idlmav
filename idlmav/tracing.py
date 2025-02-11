@@ -3,10 +3,9 @@ from .mavutils import to_device
 from typing import Any, Dict, List, Tuple, Set, Optional, Mapping
 import warnings
 import torch
-from torch import nn, fx, Tensor
+from torch import nn, fx, profiler, Tensor
 import torch.nn.functional as F
 from tabulate import tabulate
-import torchprofile
 
 class ShapeMacInterpreter(fx.Interpreter):
     def __init__(self, gm : fx.GraphModule):
@@ -36,7 +35,7 @@ class ShapeMacInterpreter(fx.Interpreter):
         self.shapes[n] = shape
 
         # Store the number of MACs if calculated
-        if n.op == 'call_module':
+        if n.op == 'call_module' or n.op == 'call_function':
             if self.cur_macs is not None: self.macs[n] = self.cur_macs
 
         # Update the state and return the result
@@ -50,17 +49,44 @@ class ShapeMacInterpreter(fx.Interpreter):
         # Estimate the FLOPS
         try:
             submod = self.fetch_attr(target)
-            macs = torchprofile.profile_macs(submod, args)
+            with profiler.profile(
+                activities=[profiler.ProfilerActivity.CPU, profiler.ProfilerActivity.CUDA],
+                record_shapes=True,
+                with_flops=True
+            ) as prof:
+                submod(*args)
+            flops = prof.key_averages().total_average().flops
+            macs = int(flops/2)
         except Exception as e:
             warnings.warn(f'FLOPS calculation failed for module {submod.__class__.__name__}: {e}')
             macs = 0  
-            # TODO: implement a fallback calculation here for well-known modules
-            # e.g. https://medium.com/@pashashaik/a-guide-to-hand-calculating-flops-and-macs-fa5221ce5ccc
         self.cur_macs = macs
 
         # Return the result
         return result
         
+    def call_function(self, target, args, kwargs):
+        # Run the module
+        result = super().call_function(target, args, kwargs)
+
+        # Estimate the FLOPS
+        try:
+            with profiler.profile(
+                activities=[profiler.ProfilerActivity.CPU, profiler.ProfilerActivity.CUDA],
+                record_shapes=True,
+                with_flops=True
+            ) as prof:
+                target(*args, **kwargs)
+            flops = prof.key_averages().total_average().flops
+            macs = int(flops/2)
+        except Exception as e:
+            warnings.warn(f'FLOPS calculation failed for function {target.__name__}: {e}')
+            macs = 0  
+        self.cur_macs = macs
+
+        # Return the result
+        return result
+
 class MavTracer:
     def __init__(self, model:nn.Module, inputs:Any, device=None,
                  concrete_args: Optional[Dict[str, Any]]=None):

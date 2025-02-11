@@ -12,11 +12,10 @@ functionality of `torch.fx`.
 # ------------------------------------------------------------------------------
 import warnings
 import torch
-from torch import nn, fx, Tensor
+from torch import nn, fx, profiler, Tensor
 import torch.nn.functional as F
 from typing import Any, Dict, List, Tuple
 from tabulate import tabulate
-import torchprofile
 import torchinfo
 import inspect
 
@@ -131,7 +130,14 @@ class ShapeInterpreter(fx.Interpreter):
         # Estimate the FLOPS
         try:
             submod = self.fetch_attr(target)
-            macs = torchprofile.profile_macs(submod, args)
+            with profiler.profile(
+                activities=[profiler.ProfilerActivity.CPU, profiler.ProfilerActivity.CUDA],
+                record_shapes=True,
+                with_flops=True
+            ) as prof:
+                submod(*args)
+            flops = prof.key_averages().total_average().flops
+            macs = int(flops/2)
         except Exception as e:
             warnings.warn(f'FLOPS calculation failed for module {submod.__class__.__name__}: {e}')
             macs = 0  
