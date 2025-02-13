@@ -71,9 +71,12 @@ class FigureRenderer:
                 'Activations: %{customdata[2]}<br>' +
                 'Parameters: %{customdata[3]}<br>' +
                 'FLOPS: %{customdata[4]}<br>' +
+                '<br>' +
+                'args: %{customdata[5]}<br>' +
+                'kwargs: %{customdata[6]}<br>' +
                 '<extra></extra>'
             ),
-            customdata=[self.node_data(n) for n in g.nodes],
+            customdata=[self.node_data(n) + self.node_arg_data(n) for n in g.nodes],
             showlegend=False
         )
         fig.add_trace(scatter_trace, row=1, col=1)
@@ -165,6 +168,9 @@ class FigureRenderer:
 
     def node_data(self, n:MavNode):
         return (n.name, n.operation, self.fmt_activ(n.activations), self.fmt_large(n.params), self.fmt_large(n.flops))
+
+    def node_arg_data(self, n:MavNode):
+        return (n.metadata['args'], n.metadata['kwargs'])
 
     def params_to_norm_val(self, params):
         """

@@ -54,7 +54,7 @@ class MavLayout():
         num_levels = 1 - min_level_number
         nodes_on_each_level = [[] for i in range(num_levels)]
         for i,n in enumerate(self.g.top_level_nodes):
-            if n in self.g.in_nodes:
+            if n in self.g.in_nodes and n.metadata['entry_type'] == 'normal':
                 n.y = 0
             else:
                 n.y = n.y - min_level_number
@@ -67,7 +67,7 @@ class MavLayout():
         level_lens = [len(level) for level in levels]
         largest_level_len = max(level_lens)
         if largest_level_len > 5:
-            print(f'Total nodes: {len(self.g.nodes)}. Input nodes: {len(self.g.in_nodes)}. Output nodes: {len(self.g.out_nodes)}')
+            print(f'Total nodes: {len(self.g.nodes)}. Input nodes: {len(self.g.in_nodes)}. Output nodes: {len(self.g.out_nodes)}. Largest level nodes: {largest_level_len}')
         if largest_level_len > 15:
             warnings.warn(f'The largest level has {largest_level_len} nodes. This is an indication that something may have gone wrong during the tracing step')
             warnings.warn('Falling back to greedy layout algorithm')

@@ -45,6 +45,7 @@ class MavMerger():
         # Ensure that for each operation, some nodes are not merged and others not
         unmerged_operations = set([n.operation for n in self.g.nodes if not n.is_subnode])
         for op in unmerged_operations:
+            if op.endswith('()'): continue  # Don't apply to function calls
             nodes = [n for n in self.g.nodes if n.operation == op]
             for n in nodes: n.is_subnode = False
 
