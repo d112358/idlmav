@@ -48,8 +48,8 @@ class WidgetRenderer:
         self.sel_marker_idx     : int = None
 
         # Derived parameters
-        self.in_level = g.in_nodes[0].y
-        self.out_level = g.out_nodes[0].y
+        self.in_level = min([n.y for n in g.in_nodes])
+        self.out_level = max([n.y for n in g.out_nodes])
         self.graph_num_rows = self.out_level - self.in_level + 1
         self.full_y_range = [self.out_level+0.5, self.in_level-0.5]  # Note the reversed order: plotting input at the top
         self.min_x = min([n.x for n in g.nodes])

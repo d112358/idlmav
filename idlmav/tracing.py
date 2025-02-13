@@ -96,18 +96,29 @@ class MavTracer:
         else:
             self.model = model
             self.inputs = inputs
+        self.concrete_args = concrete_args
+        self.graphs:List[Tuple[fx.GraphModule, List[torch.Tensor]]] = []
         self.gm: fx.GraphModule = None
-        self.interp: ShapeMacInterpreter = None        
+        self.interp: ShapeMacInterpreter = None
         self.g: MavGraph = None
+        self.input_sizes:Mapping[str, int] = {}
         self.param_counts : Dict[fx.Node, int] = {}
         self.target_names : Dict[fx.Node,str] = {}
         self.err_node: fx.Node = None
-        self.run(concrete_args)
+        self.run()
         self.build_graph()
 
-    def run(self, concrete_args: Optional[Dict[str, Any]]=None):
+    def run(self):
+        try:
+            self.run_fx()
+        except Exception as e:
+            print(f'Tracing failed with torch.fx.symbolic_trace: {e}')
+            print('Tracing with torch.compile')
+            self.run_compiler()
+
+    def run_fx(self):
         # 1st pass: symbolic tracing using torch.fx
-        self.gm = fx.symbolic_trace(self.model, concrete_args)
+        self.gm = fx.symbolic_trace(self.model, self.concrete_args)
         self.interp = ShapeMacInterpreter(self.gm)
 
         # 2nd pass: iterate through `nn.Module` and update module types and parameter counts
@@ -146,6 +157,65 @@ class MavTracer:
             self.err_node = self.interp.running_node
             warnings.warn(f'{msg}: {e}')
 
+    def custom_compiler_backend(self, gm:fx.GraphModule, example_inputs: List[torch.Tensor]):
+        self.graphs.append((gm, example_inputs))
+        # According to `fx.Interpreter.run()`, positional function args are consumed left-to-right by `placeholder` nodes.
+        x_iter = iter(example_inputs)
+        for n in gm.graph.nodes:
+            if n.op != 'placeholder': continue
+            x = next(x_iter)
+            self.input_sizes[n.name] = x.nelement()
+        return gm.forward
+    
+    def run_compiler(self):
+        # 1st pass: Compile to intercept all fx graphs
+        torch._dynamo.reset()
+        compiled_model = torch.compile(self.model, backend=self.custom_compiler_backend)
+        if isinstance(self.inputs, Mapping):
+            outputs = compiled_model(**self.inputs)
+        elif isinstance(self.inputs, Tuple):
+            outputs = compiled_model(*self.inputs)
+        else:
+            outputs = compiled_model(self.inputs)
+        
+        # For now, select the largest graph based on number of `call_function` operations
+        # * TODO: If proved valuable for many popular models, implement user controls to manually select graph
+        gm_lengths = [len([n for n in gm.graph.nodes if n.op == 'call_function']) for gm,xs in self.graphs]
+        gm_idx = gm_lengths.index(max(gm_lengths))
+        self.gm, xs = self.graphs[gm_idx]
+        self.interp = ShapeMacInterpreter(self.gm)
+
+        # 2nd pass: iterate through `nn.Module` and update module types and parameter counts
+        try:
+            for n in self.gm.graph.nodes:
+                if n.op == 'call_module':
+                    m:nn.Module = self.interp.fetch_attr(n.target)
+                    self.target_names[n] = m.__class__.__name__
+                    self.param_counts[n] = get_num_trainable_params(m)
+                elif n.op == 'call_function':
+                    self.target_names[n] = n.target.__name__
+        except Exception as e:
+            self.err_node = n
+            warnings.warn(f'2nd tracing pass failed for module {n.target}: {e}')
+
+        # 3rd pass: forward pass using torch.fx.Interpreter
+        try:
+            self.interp.run(*xs)
+        except Exception as e:
+            msg = 'Forward pass failed.'
+            n1 = self.interp.last_successful_node
+            if n1:
+                target_name = self.target_names.get(n1, None)
+                node_name = f'{n1.name}:{target_name}' if target_name else n1.name
+                msg += f' Last successful node: "{node_name}".'
+            n2 = self.interp.running_node
+            if n2:
+                target_name = self.target_names.get(n2, None)
+                node_name = f'{n2.name}:{target_name}' if target_name else n2.name
+                msg += f' Possible error node: "{node_name}".'
+            self.err_node = self.interp.running_node
+            warnings.warn(f'{msg}: {e}')
+
     def get_operation(self, op, target_name):
         match op:
             case 'placeholder': return 'input'
@@ -161,13 +231,15 @@ class MavTracer:
         existing_connections: Set[Tuple[MavNode, MavNode]] = set([])
         for n in self.gm.graph.nodes:
             # Create a new node and append it to the list
+            if n.name.startswith('l_self_'): continue
             target_name = self.target_names.get(n, '')
             node = MavNode(n.name, 0, 0)            
             node.operation = self.get_operation(n.op, target_name)
             node.activations = self.interp.shapes.get(n, (0,))
             node.params = self.param_counts.get(n, 0)
             node.flops = self.interp.macs.get(n, 0) * 2
-            node.metadata['kwargs'] = n.kwargs         
+            node.metadata['kwargs'] = n.kwargs
+            node.metadata['fx_name'] = n.name
             if n == self.err_node: node.error = True
             nodes.append(node)
             nodes_by_name[n.name] = node
@@ -176,6 +248,8 @@ class MavTracer:
             in_nodes = n.all_input_nodes
             in_node_names = [n2.name for n2 in in_nodes]
             for in_node_name in in_node_names:
+                if in_node_name.startswith('l_self_') and in_node_name in self.input_sizes:
+                    node.params += self.input_sizes[in_node_name]
                 if in_node_name not in nodes_by_name: continue
                 from_node = nodes_by_name[in_node_name]
                 to_node = node

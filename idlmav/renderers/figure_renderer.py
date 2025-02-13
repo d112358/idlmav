@@ -81,8 +81,8 @@ class FigureRenderer:
         fig.update_yaxes(showgrid=False, zeroline=False, tickmode='array', tickvals=[])
 
         # Display direction
-        in_level = g.in_nodes[0].y
-        out_level = g.out_nodes[0].y
+        in_level = min([n.y for n in g.in_nodes])
+        out_level = max([n.y for n in g.out_nodes])
         fig.update_yaxes(range=[out_level+0.5, in_level-0.5])
 
         # Add connections lines between the nodes

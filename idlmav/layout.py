@@ -1,6 +1,8 @@
 from .mavtypes import MavNode, MavConnection, MavGraph
 from typing import List, Tuple, Set, Mapping
+import warnings
 from numpy.typing import NDArray
+import math
 import numpy as np
 import itertools
 from collections import deque
@@ -18,38 +20,8 @@ class MavLayout():
         #   direction and not between nodes on the same level
         levels = self.calc_levels()
 
-        # Find the level containing the most top-level nodes
-        level_lens = [len(level) for level in levels]
-        largest_level_idx = np.argmax(level_lens)
-        largest_level_len = level_lens[largest_level_idx]
-
-        # Try all permutations of top-level nodes on the largest level
-        # * For each permutation, use the Hungarian method (via munkres library) to
-        #   iteratively determine the best placement of top-level nodes on the levels 
-        #   before and after this level
-        max_num_permutations = 1000
-        xs = [i-(largest_level_len-1)//2 for i in range(largest_level_len)]
-        xs_perms = list(itertools.permutations(xs))
-        if len(xs_perms) > max_num_permutations: xs_perms = random.sample(xs_perms, max_num_permutations)
-        num_xs_perms = len(xs_perms)
-        total_costs = [None] * num_xs_perms
-        xdata = np.zeros((num_xs_perms, len(self.g.top_level_nodes)))
-        for prmi, xs_perm in enumerate(xs_perms):
-            xdata[prmi,:], total_costs[prmi] = self.best_layout_one_fixed_level(levels, largest_level_idx, xs_perm)
-
-        # Select the permutation with the smallest total cost
-        best_idx = np.argmin(total_costs)
-        best_xs = xdata[best_idx]
-        for ni,x in enumerate(best_xs):
-            self.g.top_level_nodes[ni].x = x
-
-        # Place subnodes below the corresponding top-level nodes
-        for tn in self.g.top_level_nodes:
-            num_subnodes = len(tn._subnodes)
-            subnode_interval = 0.15 if num_subnodes <= 4 else 0.6/num_subnodes
-            for sni, sn in enumerate(tn._subnodes):
-                sn.x = tn.x
-                sn.y = tn.y + (sni+1)*subnode_interval
+        # Determine the placement of nodes within each level
+        self.place_within_levels(levels)
 
     def calc_levels(self, verbose=False):
         
@@ -89,6 +61,121 @@ class MavLayout():
             nodes_on_each_level[n.y].append(i)
 
         return nodes_on_each_level
+    
+    def place_within_levels(self, levels):
+        # Choose an algorithm based on the number of nodes in the largest level
+        level_lens = [len(level) for level in levels]
+        largest_level_len = max(level_lens)
+        if largest_level_len > 5:
+            print(f'Total nodes: {len(self.g.nodes)}. Input nodes: {len(self.g.in_nodes)}. Output nodes: {len(self.g.out_nodes)}')
+        if largest_level_len > 15:
+            warnings.warn(f'The largest level has {largest_level_len} nodes. This is an indication that something may have gone wrong during the tracing step')
+            warnings.warn('Falling back to greedy layout algorithm')
+            self.place_within_levels_greedy(levels)
+        else:
+            self.place_within_levels_munkres(levels)
+
+    def place_within_levels_greedy(self, levels):
+        # Reverse breadth-first search to determine total number of top-level nodes accessible from each top-level node
+        queue = deque(self.g.out_nodes)  # Initialize to contain all output nodes
+        visited:Set[MavNode] = set([])
+        cumul_num_outputs:Mapping[MavNode, int] = {}
+        while queue:
+            cur_node = queue.popleft()
+            visited.add(cur_node)
+
+            # Ensure that cumulative_num_outputs is defined for current node
+            if cur_node not in cumul_num_outputs: cumul_num_outputs[cur_node] = 0
+
+            # Update cumulative_num_outputs for all input nodes
+            for in_node in cur_node._top_level_in_nodes:
+                if in_node in cumul_num_outputs:
+                    cumul_num_outputs[in_node] += cumul_num_outputs[cur_node] + 1
+                else:
+                    cumul_num_outputs[in_node] = cumul_num_outputs[cur_node] + 1
+                    
+            # Queue all input nodes of current node that have all their outputs visited
+            for in_node in cur_node._top_level_in_nodes:
+                if in_node in visited: continue
+                if not all([o in visited for o in in_node._top_level_out_nodes]): continue
+                queue.append(in_node)
+
+        # At each level, place top-level nodes in order of total number of accessible output nodes
+        wc, wd = 1,10
+        level_lens = [len(level) for level in levels]
+        largest_level_len = max(level_lens)
+        candidate_xs = [i-(largest_level_len-1)//2 for i in range(largest_level_len)]
+        xs = [None] * len(self.g.top_level_nodes)
+        for cur_level in levels:
+            cur_level_nodes = [self.g.top_level_nodes[ni] for ni in cur_level]
+            cur_level_scores = [cumul_num_outputs[n] for n in cur_level_nodes]
+            sorted_nodes:List[MavNode] = [n for n,_ in sorted(zip(cur_level_nodes, cur_level_scores), key=lambda x: x[1], reverse=True)]
+            used_xs:Set[int] = set([])
+            for ni,n in enumerate(sorted_nodes):
+                available_xs = [x for x in candidate_xs if x not in used_xs]
+                cost_vector = np.zeros((len(available_xs),))  # Cost of placing node at each candidate x-coordinate
+                for xi,x in enumerate(available_xs):
+                    cc = abs(x)  # Cost of placing node away from the center
+                    cd = 0       # Cost of placing node away from connected input node
+                    for in_node in n._top_level_in_nodes:
+                        if xs[in_node._top_level_idx] is not None:
+                            cd += abs(x - xs[in_node._top_level_idx])
+                    cost_vector[xi] = wc*cc + wd*cd
+                chosen_xi = np.argmin(cost_vector)
+                n.x = available_xs[chosen_xi]
+                xs[n._top_level_idx] = n.x
+                used_xs.add(n.x)
+
+        # Place subnodes below the corresponding top-level nodes
+        for tn in self.g.top_level_nodes:
+            num_subnodes = len(tn._subnodes)
+            subnode_interval = 0.15 if num_subnodes <= 4 else 0.6/num_subnodes
+            for sni, sn in enumerate(tn._subnodes):
+                sn.x = tn.x
+                sn.y = tn.y + (sni+1)*subnode_interval
+
+    def place_within_levels_munkres(self, levels):
+        # Find the level containing the most top-level nodes
+        level_lens = [len(level) for level in levels]
+        largest_level_idx = np.argmax(level_lens)
+        largest_level_len = level_lens[largest_level_idx]
+
+        # Try all permutations of top-level nodes on the largest level
+        # * For each permutation, use the Hungarian method (via munkres library) to
+        #   iteratively determine the best placement of top-level nodes on the levels 
+        #   before and after this level
+        xs_perms = self.sample_permutations(largest_level_len)
+        num_xs_perms = len(xs_perms)
+        total_costs = [None] * num_xs_perms
+        xdata = np.zeros((num_xs_perms, len(self.g.top_level_nodes)))
+        for prmi, xs_perm in enumerate(xs_perms):
+            xdata[prmi,:], total_costs[prmi] = self.best_layout_one_fixed_level(levels, largest_level_idx, xs_perm)
+
+        # Select the permutation with the smallest total cost
+        best_idx = np.argmin(total_costs)
+        best_xs = xdata[best_idx]
+        for ni,x in enumerate(best_xs):
+            self.g.top_level_nodes[ni].x = x
+
+        # Place subnodes below the corresponding top-level nodes
+        for tn in self.g.top_level_nodes:
+            num_subnodes = len(tn._subnodes)
+            subnode_interval = 0.15 if num_subnodes <= 4 else 0.6/num_subnodes
+            for sni, sn in enumerate(tn._subnodes):
+                sn.x = tn.x
+                sn.y = tn.y + (sni+1)*subnode_interval
+
+
+    def sample_permutations(self, largest_level_len):
+        max_num_permutations = 1000
+        xs = [i-(largest_level_len-1)//2 for i in range(largest_level_len)]
+        total_permutations = math.factorial(largest_level_len)
+        if total_permutations < max_num_permutations:
+            xs_perms = list(itertools.permutations(xs))
+        else:
+            rng = np.random.default_rng()
+            xs_perms = [list(rng.permutation(xs)) for _ in range(max_num_permutations)]
+        return xs_perms
 
     def best_layout_one_fixed_level(self, levels:List[List[int]], fixed_level, fixed_xs:List[int], wc=1, wd=10, verbose=False):
         level_lens = [len(level) for level in levels]
