@@ -6,6 +6,7 @@ import warnings
 import torch
 from torch import nn, fx, profiler, Tensor
 import torch.nn.functional as F
+import re
 from tabulate import tabulate
 
 class ShapeMacInterpreter(fx.Interpreter):
@@ -90,7 +91,7 @@ class ShapeMacInterpreter(fx.Interpreter):
 
 class MavTracer:
     def __init__(self, model:nn.Module, inputs:Any, device=None,
-                 concrete_args: Optional[Dict[str, Any]]=None):
+                 concrete_args: Optional[Dict[str, Any]]=None, show_param_nodes=False):
         if device:
             self.model = model.to(device)
             self.inputs = to_device(inputs, device)
@@ -98,6 +99,7 @@ class MavTracer:
             self.model = model
             self.inputs = inputs
         self.concrete_args = concrete_args
+        self.show_param_nodes = show_param_nodes
         self.graphs:List[Tuple[fx.GraphModule, List[torch.Tensor]]] = []
         self.gm: fx.GraphModule = None
         self.interp: ShapeMacInterpreter = None
@@ -106,6 +108,8 @@ class MavTracer:
         self.param_counts : Mapping[fx.Node, int] = {}
         self.target_names : Mapping[fx.Node,str] = {}
         self.err_node: fx.Node = None
+        self.long_name_replacements:Mapping[str,str] = {}
+        self.long_name_repl_pattern:re.Pattern = None
         self.run()
         self.build_graph()
 
@@ -320,38 +324,65 @@ class MavTracer:
     #     if isinstance(x, fx.Node): return x
     #     return x
 
+    def ensure_unique(self, name, existing_names):
+        match = re.match(r"^(.*?)(\d+)?$", name)
+        base, num = match.groups()
+        num = int(num) if num else 0
+        new_name = name
+
+        while new_name in existing_names:
+            num += 1
+            new_name = f"{base}{num}"
+        return new_name
+    
+    def build_long_name_replacements(self):
+        long_names = [n.name for n in self.gm.graph.nodes if n.op == 'placeholder' and n.name.startswith('l_self_')]
+        self.long_name_replacements:Mapping[str,str] = {}
+        for long_name in long_names:
+            short_name = re.sub('_self|_modules|_parameters','',long_name)
+            short_name = self.ensure_unique(short_name, self.long_name_replacements.values())
+            self.long_name_replacements[long_name] = short_name
+        self.long_name_repl_pattern = re.compile("|".join(map(re.escape, self.long_name_replacements.keys())))
+
+    def long_name_replace_match(self, match):
+        return self.long_name_replacements[match.group(0)]
+        
+    def shorten(self, text):
+        return self.long_name_repl_pattern.sub(self.long_name_replace_match, text)
+
     def build_graph(self):
+        self.build_long_name_replacements()
         entry_types, exit_types, param_sizes = self.calc_entry_exit_types()
         nodes: List[MavNode] = []
         nodes_by_name: Mapping[str, MavNode] = {}
-        new_node_names:Mapping[fx.Node, str] = {}
         connections: List[MavConnection] = []
         existing_connections: Set[Tuple[MavNode, MavNode]] = set([])
         for n in self.gm.graph.nodes:
             # Create a new node and append it to the list
             entry_type = entry_types.get(n, 'unknown')
             exit_type = exit_types.get(n, 'unknown')
-            if entry_type != 'normal' and entry_type != 'learn-split': continue
+            if entry_type != 'normal' and entry_type != 'learn-split' and not self.show_param_nodes: continue
             if exit_type != 'normal': continue
-            node = MavNode(n.name, 0, 0)            
+            short_name = self.shorten(n.name)
+            node = MavNode(short_name, 0, 0)            
             node.operation = self.get_operation(n, entry_types)
             if not node.operation:
                 break_here = True
             node.activations = self.interp.shapes.get(n, (0,))
             node.params = self.param_counts.get(n, 0) + param_sizes.get(n, 0)
             node.flops = self.interp.macs.get(n, 0) * 2
-            node.metadata['args'] = n.args.__repr__()
+            node.metadata['args'] = self.shorten(n.args.__repr__())
             node.metadata['kwargs'] = n.kwargs.__repr__()
             node.metadata['fx_name'] = n.name
             node.metadata['entry_type'] = entry_type
             node.metadata['exit_type'] = exit_type
             if n == self.err_node: node.error = True
             nodes.append(node)
-            nodes_by_name[n.name] = node
+            nodes_by_name[short_name] = node
 
             # Find connections to and from this node
             in_nodes = n.all_input_nodes
-            in_node_names = [n2.name for n2 in in_nodes]
+            in_node_names = [self.shorten(n2.name) for n2 in in_nodes]
             for in_node_name in in_node_names:
                 if in_node_name not in nodes_by_name: continue
                 from_node = nodes_by_name[in_node_name]
@@ -362,7 +393,7 @@ class MavTracer:
                 existing_connections.add((from_node, to_node))
                     
             out_nodes = list(n.users.keys())
-            out_node_names = [n2.name for n2 in out_nodes]
+            out_node_names = [self.shorten(n2.name) for n2 in out_nodes]
             for out_node_name in out_node_names:
                 if out_node_name not in nodes_by_name: continue
                 from_node = node

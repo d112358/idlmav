@@ -166,3 +166,4 @@ miniai/
 build_output/
 runs/
 *.pt
+*.mp3

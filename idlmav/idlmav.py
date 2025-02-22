@@ -13,8 +13,9 @@ from IPython.display import display
 class MAV:
     def __init__(self, model:nn.Module, inputs:Union[Tensor, Tuple[Tensor]], device=None,
                  merge_threshold=0.01,
-                 concrete_args: Optional[Dict[str, Any]] = None):
-        self.tracer = MavTracer(model, inputs, device, concrete_args)
+                 concrete_args: Optional[Dict[str, Any]] = None,
+                 show_param_nodes=False):
+        self.tracer = MavTracer(model, inputs, device, concrete_args, show_param_nodes)
         merge_graph_nodes(self.tracer.g, 
                           cumul_param_threshold=merge_threshold)
         layout_graph_nodes(self.tracer.g)
