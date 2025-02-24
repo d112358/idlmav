@@ -115,7 +115,7 @@ class WidgetRenderer:
         # * Use a single trace with `None` values separating different lines
         # * Using a separate trace for every line cause a blank display 
         #   on Colab
-        # * Separate traces may also negatively impact reactivity, e.g. 
+        # * Separate traces may also negatively impact responsiveness, e.g. 
         #   to pan & zoom actions
         x_coords, y_coords = [],[]
         for c in g.connections:

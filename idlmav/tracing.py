@@ -344,10 +344,11 @@ class MavTracer:
             self.long_name_replacements[long_name] = short_name
         self.long_name_repl_pattern = re.compile("|".join(map(re.escape, self.long_name_replacements.keys())))
 
-    def long_name_replace_match(self, match):
+    def long_name_replace_match(self, match):        
         return self.long_name_replacements[match.group(0)]
         
     def shorten(self, text):
+        if not self.long_name_replacements: return text
         return self.long_name_repl_pattern.sub(self.long_name_replace_match, text)
 
     def build_graph(self):

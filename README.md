@@ -44,7 +44,7 @@ with plotly_renderer('notebook_connected'):
 ## Interactive widget
 * Based on [ipywidgets](https://ipywidgets.readthedocs.io/en/latest/) and [plotly.graph_objects.FigureWidget](https://plotly.com/python/figurewidget/)
 * Synchronizaton between slider, overview panel, main graph and table
-  - Includes reactivity of other components to plotly's built-in pan and zoom actions
+  - Includes responsiveness of other components to plotly's built-in pan and zoom actions
 * Clicking a node in the main graph highlights it in the table
 * Limited portability expected to fluctuate over time on different environments
 ```python

@@ -37,13 +37,14 @@ class MAV:
     def render_figure(self, 
                       add_table:bool=True, 
                       add_slider:bool=False, 
+                      add_overview:bool=False, 
                       num_levels_displayed:float=10,
                       palette:Union[str, List[str]]='large', 
                       avoid_palette_idxs:Set[int]=set([]), 
                       fixed_color_map:Dict[str,int]={},
                       ) -> go.Figure:
         color_graph_nodes(self.tracer.g, palette=palette,avoid_palette_idxs=avoid_palette_idxs, fixed_color_map=fixed_color_map)
-        return FigureRenderer(self.tracer.g).render(add_table=add_table, add_slider=add_slider,
+        return FigureRenderer(self.tracer.g).render(add_table=add_table, add_slider=add_slider, add_overview=add_overview,
                                                     num_levels_displayed=num_levels_displayed)
 
     @overload
@@ -65,6 +66,7 @@ class MAV:
     def show_figure(self, 
                     add_table:bool=True, 
                     add_slider:bool=False, 
+                    add_overview:bool=False, 
                     num_levels_displayed:float=10,
                     palette:Union[str, List[str]]='large', 
                     avoid_palette_idxs:Set[int]=set([]), 
@@ -80,6 +82,7 @@ class MAV:
                     offline=False,
                     add_table:bool=True, 
                     add_slider:bool=False, 
+                    add_overview:bool=False, 
                     num_levels_displayed:float=10,
                     palette:Union[str, List[str]]='large', 
                     avoid_palette_idxs:Set[int]=set([]), 
