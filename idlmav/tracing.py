@@ -15,16 +15,16 @@ class ShapeMacInterpreter(fx.Interpreter):
 
         # Outputs
         self.shapes : Dict[fx.Node, Tuple[int]] = {}
-        self.macs : Dict[fx.Node, int] = {}
+        self.flops : Dict[fx.Node, int] = {}
 
         # State
         self.running_node = None
         self.last_successful_node = None
-        self.cur_macs: int = None
+        self.cur_flops: int = None
 
     def run_node(self, n:fx.Node) -> Any:
         # Run the node
-        self.cur_macs = None
+        self.cur_flops = None
         self.running_node = n
         result = super().run_node(n)
         self.running_node = None
@@ -36,9 +36,9 @@ class ShapeMacInterpreter(fx.Interpreter):
             shape = (0,0,0,0)
         self.shapes[n] = shape
 
-        # Store the number of MACs if calculated
+        # Store the number of FLOPS if calculated
         if n.op == 'call_module' or n.op == 'call_function':
-            if self.cur_macs is not None: self.macs[n] = self.cur_macs
+            if self.cur_flops is not None: self.flops[n] = self.cur_flops
 
         # Update the state and return the result
         self.last_successful_node = n
@@ -58,11 +58,10 @@ class ShapeMacInterpreter(fx.Interpreter):
             ) as prof:
                 submod(*args)
             flops = prof.key_averages().total_average().flops
-            macs = int(flops/2)
         except Exception as e:
             warnings.warn(f'FLOPS calculation failed for module {submod.__class__.__name__}: {e}')
-            macs = 0  
-        self.cur_macs = macs
+            flops = 0  
+        self.cur_flops = flops
 
         # Return the result
         return result
@@ -80,11 +79,10 @@ class ShapeMacInterpreter(fx.Interpreter):
             ) as prof:
                 target(*args, **kwargs)
             flops = prof.key_averages().total_average().flops
-            macs = int(flops/2)
         except Exception as e:
             warnings.warn(f'FLOPS calculation failed for function {target.__name__}: {e}')
-            macs = 0  
-        self.cur_macs = macs
+            flops = 0  
+        self.cur_flops = flops
 
         # Return the result
         return result
@@ -371,7 +369,7 @@ class MavTracer:
                 break_here = True
             node.activations = self.interp.shapes.get(n, (0,))
             node.params = self.param_counts.get(n, 0) + param_sizes.get(n, 0)
-            node.flops = self.interp.macs.get(n, 0) * 2
+            node.flops = self.interp.flops.get(n, 0)
             node.metadata['args'] = self.shorten(n.args.__repr__())
             node.metadata['kwargs'] = n.kwargs.__repr__()
             node.metadata['fx_name'] = n.name
