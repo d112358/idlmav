@@ -4,6 +4,7 @@ import time
 import numpy as np
 import plotly.graph_objects as go
 import plotly.callbacks as cb
+from plotly.basedatatypes import BaseTraceType
 import ipywidgets as widgets
 from IPython.display import display, HTML, Javascript
 
@@ -34,18 +35,21 @@ class WidgetRenderer:
         self.g = g
 
         # Panels and widgets
-        self.main_panel     : widgets.Box     = None
-        self.table_panel    : widgets.Box     = None
-        self.overview_panel : widgets.Box     = None
-        self.slider_panel   : widgets.Box     = None
-        self.main_fig       : go.FigureWidget = None
-        self.table_widget   : widgets.Output  = None
-        self.overview_fig   : go.FigureWidget = None
-        self.slider_widget  : widgets.FloatRangeSlider = None
+        self.main_panel      : widgets.Box      = None
+        self.table_panel     : widgets.Box      = None
+        self.overview_panel  : widgets.Box      = None
+        self.slider_panel    : widgets.Box      = None
+        self.main_fig        : go.FigureWidget  = None
+        self.table_widget    : widgets.Output   = None
+        self.overview_fig    : go.FigureWidget  = None
+        self.slider_widget   : widgets.FloatRangeSlider = None
+        self.dropdown_widget : widgets.Dropdown = None
 
-        # Annotations
-        self.overview_rect_idx  : int = None
-        self.sel_marker_idx     : int = None
+        # Traces
+        self.overview_rect_trace   : BaseTraceType = None
+        self.sel_marker_trace      : BaseTraceType = None
+        self.node_marker_trace     : BaseTraceType = None
+        self.overview_marker_trace : BaseTraceType = None
 
         # Derived parameters
         self.in_level = min([n.y for n in g.in_nodes])
@@ -67,7 +71,6 @@ class WidgetRenderer:
         self.flops_log_ratio = np.log2(self.flops_range[1]) - np.log2(self.flops_range[0]) if pos_flops else None
 
         # State variables
-        self.color_style = 'operation'  # ['operation','params','flops']
         self.unique_id = f'{id(self)}_{int(time.time() * 1000)}'
         self.updating_slider = False
 
@@ -109,9 +112,9 @@ class WidgetRenderer:
             hoverinfo='skip', showlegend=False
         )
         self.main_fig.add_trace(sel_marker)
-        self.sel_marker_idx = len(self.main_fig.data)-1
+        self.sel_marker_trace = self.main_fig.data[-1]
 
-        # Add connections lines between the nodes
+        # Draw connections lines between the nodes
         # * Use a single trace with `None` values separating different lines
         # * Using a separate trace for every line cause a blank display 
         #   on Colab
@@ -133,32 +136,10 @@ class WidgetRenderer:
         )
         self.main_fig.add_trace(line_trace)
 
-        # Add the node markers
-        node_trace = go.Scatter(
-            x=[n.x for n in g.nodes], 
-            y=[n.y for n in g.nodes], 
-            mode='markers', 
-            marker=dict(
-                size=[self.params_to_dot_size(n.params) for n in g.nodes],
-                color=[self.get_node_color(n) for n in g.nodes],
-                colorscale='Bluered'
-            ),
-            hovertemplate=(
-                'Name: %{customdata[0]}<br>' +
-                'Operation: %{customdata[1]}<br>' +
-                'Activations: %{customdata[2]}<br>' +
-                'Parameters: %{customdata[3]}<br>' +
-                'FLOPS: %{customdata[4]}<br>' +
-                '<br>' +
-                'args: %{customdata[5]}<br>' +
-                'kwargs: %{customdata[6]}<br>' +
-                '<extra></extra>'
-            ),
-            customdata=[self.node_data(n) + self.node_arg_data(n) for n in g.nodes],
-            showlegend=False
-        )
+        # Draw nodes
+        node_trace = self.build_node_trace(False, 'params', 'operation')
         self.main_fig.add_trace(node_trace)
-        node_trace_idx = len(self.main_fig.data)-1
+        self.node_marker_trace = self.main_fig.data[-1]
 
         # Add table if selected
         if add_table:
@@ -174,7 +155,6 @@ class WidgetRenderer:
             panels.append(self.table_panel)
             
         # Add overview window if selected
-        overview_trace_idx = None
         if add_overview:
             # Overview panel
             overview_panel_layout = widgets.Layout(flex = '0 0 auto', margin='0px', padding='0px', overflow='hidden')
@@ -198,21 +178,9 @@ class WidgetRenderer:
             self.overview_fig.add_trace(line_trace)
                 
             # Nodes
-            overview_nodes_trace = go.Scatter(
-                x=[n.x for n in g.nodes], 
-                y=[n.y for n in g.nodes], 
-                mode='markers', 
-                marker=dict(
-                    size=[self.params_to_dot_size_overview(n.params) for n in g.nodes],
-                    color=[self.get_node_color(n) for n in g.nodes],
-                    colorscale='Bluered'
-                ),
-                hovertemplate='<extra></extra>',
-                customdata=[self.node_data(n) for n in g.nodes],
-                showlegend=False
-            )
+            overview_nodes_trace = self.build_node_trace(True, 'params', 'operation')
             self.overview_fig.add_trace(overview_nodes_trace)
-            overview_trace_idx = len(self.overview_fig.data)-1
+            self.overview_marker_trace = self.overview_fig.data[-1]
 
             # Rectangle
             x0, y0, x1, y1 = self.min_x-0.5, initial_y_range[0], self.max_x+0.5, initial_y_range[1]
@@ -228,7 +196,7 @@ class WidgetRenderer:
                 showlegend=False
             )
             self.overview_fig.add_trace(rect_trace)
-            self.overview_rect_idx = len(self.overview_fig.data)-1
+            self.overview_rect_trace = self.overview_fig.data[-1]
 
         # Add slider if selected
         # * Use negative values everywhere, because ipywidgets does not support
@@ -244,20 +212,34 @@ class WidgetRenderer:
             self.slider_panel = widgets.Box(children=[self.slider_widget], layout=slider_panel_layout)
             panels.insert(0, self.slider_panel)
 
+        # Add dropdown menu for marker sizes and colors
+        size_color_options = [('params','operation'),
+                              ('flops','operation'),
+                              ('params','flops'),
+                              ('flops','params')]
+        size_color_labels = dict(operation='operation', params='params', flops='FLOPS')
+        dropdown_options = []
+        for size_by, color_by in size_color_options:
+            label = f'Size by {size_color_labels[size_by]}, color by {size_color_labels[color_by]}'
+            dropdown_options.append((label, (size_by, color_by)))
+        self.dropdown_widget = widgets.Dropdown(options=dropdown_options, value=size_color_options[0], description='')
+
         # Create container for all panels
         # * To be displayed in Notebook using `display`
-        container_layout = widgets.Layout(
-            width='100%',
-            margin='0px', padding='0px')
-        container = widgets.HBox(panels, layout=container_layout)
+        horz_container_layout = widgets.Layout(width='100%', margin='0px', padding='0px')
+        horz_container = widgets.HBox(panels, layout=horz_container_layout)
+        container_layout = widgets.Layout(margin='0px', padding='0px')
+        container = widgets.VBox([horz_container, self.dropdown_widget], layout=container_layout)
 
         # Set up event handlers        
-        self.main_fig.data[node_trace_idx].on_click(self.on_main_panel_click)
+        self.node_marker_trace.on_click(self.on_main_panel_click)
         self.main_fig.layout.on_change(self.on_main_panel_pan_zoom, 'xaxis.range', 'yaxis.range')
         if self.overview_fig:
-            self.overview_fig.data[overview_trace_idx].on_click(self.on_overview_panel_click)
+            self.overview_marker_trace.on_click(self.on_overview_panel_click)
         if self.slider_widget:
             self.slider_widget.observe(self.on_slider_value_change, names="value")
+        if self.dropdown_widget:
+            self.dropdown_widget.observe(self.on_dropdown_value_change, names="value")
 
         # Restrict actions on plots
         # self.main_fig.update_layout(config=dict(displayModeBar=False))
@@ -271,6 +253,52 @@ class WidgetRenderer:
         # Return the container
         return container
     
+    def build_node_trace(self, is_overview:bool, size_by:str, color_by:str):
+        if is_overview:
+            hovertemplate='%{customdata[0]}<extra></extra>'
+        else:
+            hovertemplate=(
+                'Name: %{customdata[0]}<br>' +
+                'Operation: %{customdata[1]}<br>' +
+                'Activations: %{customdata[2]}<br>' +
+                'Parameters: %{customdata[3]}<br>' +
+                'FLOPS: %{customdata[4]}<br>' +
+                '<br>' +
+                'args: %{customdata[5]}<br>' +
+                'kwargs: %{customdata[6]}<br>' +
+                '<extra></extra>'
+            )
+        return go.Scatter(
+            x=[n.x for n in self.g.nodes], 
+            y=[n.y for n in self.g.nodes], 
+            mode='markers', 
+            marker=self.build_marker_dict(is_overview, size_by, color_by),
+            hovertemplate=hovertemplate,
+            customdata=[self.node_data(n) + self.node_arg_data(n) for n in self.g.nodes],
+            showlegend=False
+        )
+    
+    def build_marker_dict(self, is_overview:bool, size_by:str, color_by:str):
+        g = self.g
+        if is_overview:
+            if size_by=='flops':
+                sizes = [self.flops_to_dot_size_overview(n.params) for n in self.g.nodes]
+            elif size_by=='params':
+                sizes = [self.params_to_dot_size_overview(n.params) for n in self.g.nodes]
+            else:
+                raise ValueError(f'Unknown size_by: {size_by}')
+        else:
+            if size_by=='flops':
+                sizes = [self.flops_to_dot_size(n.params) for n in self.g.nodes]
+            elif size_by=='params':
+                sizes = [self.params_to_dot_size(n.params) for n in self.g.nodes]
+            else:
+                raise ValueError(f'Unknown size_by: {size_by}')
+        
+        colors = [self.get_node_color(n, color_by) for n in self.g.nodes]
+
+        return dict(size=sizes, color=colors, colorscale='Bluered')
+
     def column_headings(self):
         total_params = sum([n.params for n in self.g.nodes])
         total_flops = sum([n.flops for n in self.g.nodes])
@@ -332,13 +360,20 @@ class WidgetRenderer:
         v_norm = self.flops_to_norm_val(flops)
         return dot_range[0] + v_norm*(dot_range[1]-dot_range[0])
     
-    def get_node_color(self, node:MavNode):
-        if self.color_style == 'operation': 
+    def flops_to_dot_size_overview(self, flops):
+        overview_dot_range = [4,10] # Plotly default size is 6
+        v_norm = self.flops_to_norm_val(flops)
+        return overview_dot_range[0] + v_norm*(overview_dot_range[1]-overview_dot_range[0])
+
+    def get_node_color(self, node:MavNode, color_by='operation'):
+        if color_by == 'operation': 
             return node.op_color
-        elif self.color_style == 'flops': 
+        elif color_by == 'flops': 
             return self.flops_to_norm_val(node.flops)
+        elif color_by == 'params': 
+            return self.params_to_norm_val(node.flops)
         else: 
-            return self.params_to_norm_val(node.params)
+            raise ValueError(f'Unknown color style: {color_by}')
 
     def html_scrolling_table_id(self):
         return f'scr_table_{self.unique_id}'
@@ -422,8 +457,8 @@ class WidgetRenderer:
 
         # Update selected marker
         node = self.g.nodes[idx]
-        if self.sel_marker_idx is not None:
-            self.main_fig.data[self.sel_marker_idx].update(
+        if self.sel_marker_trace is not None:
+            self.sel_marker_trace.update(
                 x=[node.x], y=[node.y], 
                 marker_size=[self.params_to_dot_size(node.params)]
             )
@@ -493,12 +528,19 @@ class WidgetRenderer:
             yaxis=dict(range=[-self.slider_widget.value[0], -self.slider_widget.value[1]])
         )
 
+    def on_dropdown_value_change(self, value_dict):
+        size_by, color_by = self.dropdown_widget.value
+        if self.node_marker_trace:
+            self.node_marker_trace.update(marker=self.build_marker_dict(False, size_by, color_by))
+        if self.overview_marker_trace:
+            self.overview_marker_trace.update(marker=self.build_marker_dict(True, size_by, color_by))
+
     def on_main_panel_pan_zoom(self, layout, x_range, y_range):
         # Update rectangle on overview panel
         if self.overview_fig:
             x0, x1 = x_range
             y0, y1 = y_range
-            self.overview_fig.data[self.overview_rect_idx].update(
+            self.overview_rect_trace.update(
                 x=[x0, x0, x1, x1, x0], 
                 y=[y0, y1, y1, y0, y0]
             )

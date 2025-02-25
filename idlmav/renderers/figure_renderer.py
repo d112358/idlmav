@@ -136,7 +136,7 @@ class FigureRenderer:
             )
             self.fig.add_trace(table_trace, row=1, col=self.table_sp_col)
         
-        # Add styling dropdown menu
+        # Add dropdown menu for marker sizes and colors
         self.fig.update_layout(updatemenus=[self.build_styling_menu(pad_t=8)])
 
         # Add slider if selected
@@ -322,17 +322,17 @@ class FigureRenderer:
         v_norm = self.flops_to_norm_val(flops)
         return overview_dot_range[0] + v_norm*(overview_dot_range[1]-overview_dot_range[0])
 
-    def get_node_color(self, node:MavNode, color_style='operation'):
-        # Allow passing in color_style externally to generate marker colors
+    def get_node_color(self, node:MavNode, color_by='operation'):
+        # Allow passing in color_by externally to generate marker colors
         # for Plotly custom dropdown menus
-        if color_style == 'operation': 
+        if color_by == 'operation': 
             return node.op_color
-        elif color_style == 'flops': 
+        elif color_by == 'flops': 
             return self.flops_to_norm_val(node.flops)
-        elif color_style == 'params': 
+        elif color_by == 'params': 
             return self.params_to_norm_val(node.flops)
         else: 
-            raise ValueError(f'Unknown color style: {color_style}')
+            raise ValueError(f'Unknown color style: {color_by}')
         
     def get_connection_coords(self, c:MavConnection):
         if use_straight_connection(c, self.g):
