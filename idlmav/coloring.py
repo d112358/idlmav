@@ -1,16 +1,28 @@
+from .mavoptions import RenderOptions
 from .mavtypes import MavNode, MavConnection, MavGraph
 from typing import Dict, List, Tuple, Union, Set, overload
 import plotly.colors as pc
 import warnings
 
 class MavColorer():
-    def __init__(self, graph:MavGraph, 
-                 palette:Union[str, List[str]]='large', 
-                 avoid_palette_idxs:Set[int]=set([]), 
-                 fixed_color_map:Dict[str,int]={}):
+    """
+    Class that performs the coloring step
+
+    All processing is performed upon instantiation.
+
+    This class is not used after this, so users are encouraged to access
+    it via `color_graph_nodes`, except if sub-classed.
+    """
+    def __init__(self, graph:MavGraph, opts:RenderOptions=RenderOptions(), **kwargs):
+        """
+        Instantiates a `MavColorer` class and performs the coloring step.
+
+        See `color_graph_nodes` for a description of arguments
+        """
+        for k,v in kwargs.items(): opts.__setattr__(k,v)
         self.g = graph
 
-        self.specified_palette = palette
+        self.specified_palette = opts.palette
         self.palette: List[str] = []                 # Updated in `update_palette`
         self.avoid_palette_idxs: Set[int] = set([])  # Updated in `update_palette`
         self.op_cat_map: Dict[str, str] = {}         # Updated in `update_op_cat_mappings`
@@ -18,10 +30,10 @@ class MavColorer():
         self.known_op_list: List[str] = []           # Updated in `update_op_cat_mappings`
         self.fixed_color_map: Dict[str, str] = {}    # Updated in `update_base_color_mappings` and `update_user_color_mappings`
 
-        self.update_palette(palette, avoid_palette_idxs)
+        self.update_palette(opts.palette, opts.avoid_palette_idxs)
         self.update_op_cat_mappings()
         self.update_base_color_mappings()
-        self.update_user_color_mappings(fixed_color_map)
+        self.update_user_color_mappings(opts.fixed_color_map)
         self.color_nodes()
 
     def update_palette(self, palette:str, avoid_palette_idxs:List[int]):
@@ -413,20 +425,17 @@ class MavColorer():
 
 def rgb_to_hex(colors):
     """
-    `rgb_to_hex` converts a color of format "rgb(red,green,blue)"
-    to a color of format "#RRGGBB". The input and output colors
-    are both strings.
+    Converts a color of format "rgb(red,green,blue)" to a color of format 
+    "#RRGGBB". The input and output colors are both strings.
 
-    `rgb_to_hex` also accepts lists, tuples and sets of color
-    strings, in which case it will return an iterator of the
-    same type.
+    Also accepts lists, tuples and sets of color strings, in which case 
+    the resurn value will be an iterator of the same type.
 
     Plotly color sequences (e.g. `plotly.colors.quantitative.Bold`)
     don't all return their values in the same format. Plotly
     provides `plotly.colors.convert_colors_to_same_type` to convert
     all colors to RGB format, but nothing currently to convert
-    all colors to hex format. That is where this function comes
-    in.
+    all colors to hex format. That is where this function comes in.
     """
     def rgb_to_hex_1color(rgb_color_str):
         if isinstance(rgb_color_str, str) and rgb_color_str.startswith("rgb"):
@@ -449,10 +458,48 @@ def colors_to_hex(colors):
 def plotly_palette_as_hex(palette):
     return colors_to_hex(getattr(pc.qualitative, palette))
 
-@overload
-def color_graph_nodes(g:MavGraph, 
-                      palette:Union[str, List[str]]='large', 
-                      avoid_palette_idxs:Set[int]=set([]), 
-                      fixed_color_map:Dict[str,int]={}): ...
-def color_graph_nodes(g:MavGraph, *args, **kwargs):
-    colorer = MavColorer(g, *args, **kwargs)
+def color_graph_nodes(g:MavGraph, opts:RenderOptions=RenderOptions(), **kwargs):
+    """
+    Performs the coloring step
+    
+    Keyword arguments may be passed either via a `RenderOptions` object or
+    as-is. Using a `RenderOptions` object provides better intellisense, 
+    but plain keyword arguments results in more concise code.
+
+    The following two lines are equivalent:
+    ```
+    color_graph_nodes(g, RenderOptions(palette='vivid', avoid_palette_idxs={10}))  
+    color_graph_nodes(g, palette='vivid', avoid_palette_idxs={10})  
+    ```
+
+    Parameters
+    ----------
+    g: MavGraph
+        Graph object produced by tracing step
+
+    palette: string or list of strings
+        A discrete color palette to use for node marker colors when coloring
+        by operation. The value may be in any of the following formats:
+        * A named palette from https://plotly.com/python/discrete-color/#color-sequences-in-plotly-express, e.g. 'Vivid'
+        * A list of strings in '#RRGGBB' format
+        * One of the strings 'large' or 'small'
+
+    avoid_palette_idxs: set[int]
+        Indices in the specified `palette` that should not be used for marker colors. 
+        This is useful when specifying a named palette from https://plotly.com/python/discrete-color/#color-sequences-in-plotly-express
+
+    fixed_color_map: dict[str,int]
+        Force specific node operations to specific colors to ensure consistency
+        across models visualized.
+        
+        Keys may take on any of the following formats:
+        * Any value in the "Operations" column of the table produced by IDLMAV
+        * Any category listed at https://pytorch.org/docs/stable/nn.html
+
+        Example:
+        ```
+        fixed_color_map={'Convolution':7, 'add()':0, 'nn.MaxPool2d':5}
+        ```   
+    """
+    for k,v in kwargs.items(): opts.__setattr__(k,v)
+    colorer = MavColorer(g, opts)

@@ -1,3 +1,4 @@
+from .mavoptions import MavOptions
 from .mavtypes import MavNode, MavConnection, MavGraph
 from .mavutils import to_device
 from typing import Any, Dict, List, Tuple, Set, Optional, Mapping
@@ -10,6 +11,10 @@ import re
 from tabulate import tabulate
 
 class ShapeMacInterpreter(fx.Interpreter):
+    """
+    Class that performs `torch.fx` interpretation to extract
+    activations and FLOPS for every node in the graph
+    """
     def __init__(self, gm : fx.GraphModule):
         super().__init__(gm)
 
@@ -88,16 +93,80 @@ class ShapeMacInterpreter(fx.Interpreter):
         return result
 
 class MavTracer:
-    def __init__(self, model:nn.Module, inputs:Any, device=None,
-                 concrete_args: Optional[Dict[str, Any]]=None, show_param_nodes=False):
-        if device:
-            self.model = model.to(device)
-            self.inputs = to_device(inputs, device)
+    """
+    Class that performs the tracing step
+
+    All processing is performed upon instantiation
+
+    After processing, the `MavGraph` object required for the remaining steps
+    may be found in the `g` class member.
+    """
+    def __init__(self, model:nn.Module, inputs:Any, 
+                 opts:MavOptions=MavOptions(), **kwargs):
+        """
+        Creates an instance of `MavTracer` and performs the tracing step
+
+        Keyword arguments may be passed either via a `MavOptions` object or
+        as-is. Using a `MavOptions` object provides better intellisense, 
+        but plain keyword arguments results in more concise code.
+
+        The following two lines are equivalent:
+        ```
+        tracer = MavTracer(model, inputs, MavOptions(device='cpu', try_fx_first=False))  
+        tracer = MavTracer(model, inputs, device='cpu', try_fx_first=False)  
+        ```
+
+        Parameters
+        ----------
+        model: nn.Module:
+            PyTorch model to trace. Must either be traceable using `torch.fx`
+            or compilable using `torch.compile`
+
+        inputs: Tensor or container or tensors
+            The inputs to pass to the model's forward pass
+
+        device: str or None:
+            If not None, moves the model and inputs to the specified device, 
+            e.g. 'cpu', 'cuda'
+            
+        try_fx_first: bool
+            Specifies whether to first attempt tracing the computation graph using 
+            `torch.fx.symbolic_trace` before falling back to `torch.compile`. 
+            * `torch.fx.symbolic_trace` fails more often than `torch.compile`, but 
+              when it passes, classes in the model are preserved.
+            * For example, `torch.fx.symbolic_trace` will produce an `nn.Conv2d`
+              module where `torch.compile` will produce a `conv2d()` function call
+              with trainable parameters in an external node.
+
+        show_param_nodes: bool
+            Determines whether nodes representing trainable parameters should be left 
+            as-is in the computation graph. 
+            * If set to `False`, IDLMAV attempts to propagate the trainable parameters
+              to the first operation that uses them. Where trainable parameters are
+              shared by multiple operations, propagation stops and the parameter
+              node is connected to the operations using it
+            * If set to `True`, all pre-processing steps applied to trainable 
+              parameters are shown in the computation graph. This often includes
+              many tensor shape manipulation steps.
+            * `show_param_nodes` is applicable to computational graphs traced with
+              `torch.compile` (either as a result of `torch.fx.symbolic_trace failing
+              or of setting `try_fx_first` to False).
+
+        concrete_args: dict[str, any]
+            If specified, this argument is passed as-is to `torch.fx.symbolic_trace` 
+            to fix some of the arguments to the forward pass method. See
+            the documentation of `torch.fx.symbolic_trace` for more information
+        """
+        for k,v in kwargs.items(): opts.__setattr__(k,v)
+        if opts.device:
+            self.model = model.to(opts.device)
+            self.inputs = to_device(inputs, opts.device)
         else:
             self.model = model
             self.inputs = inputs
-        self.concrete_args = concrete_args
-        self.show_param_nodes = show_param_nodes
+        self.concrete_args = opts.concrete_args
+        self.try_fx_first = opts.try_fx_first
+        self.show_param_nodes = opts.show_param_nodes
         self.graphs:List[Tuple[fx.GraphModule, List[torch.Tensor]]] = []
         self.gm: fx.GraphModule = None
         self.interp: ShapeMacInterpreter = None
@@ -112,11 +181,14 @@ class MavTracer:
         self.build_graph()
 
     def run(self):
-        try:
-            self.run_fx()
-        except Exception as e:
-            print(f'Tracing failed with torch.fx.symbolic_trace: {e}')
-            print('Tracing with torch.compile')
+        if self.try_fx_first:
+            try:
+                self.run_fx()
+            except Exception as e:
+                print(f'Tracing failed with torch.fx.symbolic_trace: {e}')
+                print('Tracing with torch.compile')
+                self.run_compiler()
+        else:
             self.run_compiler()
 
     def run_fx(self):
@@ -352,6 +424,7 @@ class MavTracer:
     def build_graph(self):
         self.build_long_name_replacements()
         entry_types, exit_types, param_sizes = self.calc_entry_exit_types()
+        if self.show_param_nodes: param_sizes = self.input_sizes
         nodes: List[MavNode] = []
         nodes_by_name: Mapping[str, MavNode] = {}
         connections: List[MavConnection] = []
@@ -414,7 +487,7 @@ class MavTracer:
     
 
 def rgetattr(m: nn.Module, attr: str) -> Tensor | None:
-    # From torchinfo, used in `get_param_count()`:
+    # From torchinfo, used in `get_num_trainable_params()`:
     for attr_i in attr.split("."):
         if not hasattr(m, attr_i):
             return None

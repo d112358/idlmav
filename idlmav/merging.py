@@ -1,17 +1,31 @@
+from .mavoptions import MavOptions
 from .mavtypes import MavNode, MavGraph
 from typing import overload
 
 class MavMerger():
-    def __init__(self, graph:MavGraph, cumul_param_threshold=0.01):
+    """
+    Class that performs the merging step
+
+    All processing is performed upon instantiation.
+
+    This class is not used after this, so users are encouraged to access
+    it via `merge_graph_nodes`, except if sub-classed.
+    """
+    def __init__(self, graph:MavGraph, opts:MavOptions=MavOptions(), **kwargs):
+        """
+        Instantiates a `MavMerger` class and performs the merging step.
+
+        See `merge_graph_nodes` for a description of arguments
+        """
+        for k,v in kwargs.items(): opts.__setattr__(k,v)
         self.g = graph
-        self.merge_nodes(cumul_param_threshold)
+        self.merge_nodes(opts.merge_threshold)
 
     def merge_nodes(self, cumul_param_threshold):
         """
-        `merge_nodes` marks some nodes as top-level and others
-        as merged. When drawn, top-level nodes will be placed at 
-        integer coordinates and merged nodes the fractional parts 
-        between integer coordinates. 
+        Marks certain nodes as top-level and others as merged. When drawn, 
+        top-level nodes will be placed at integer coordinates and merged 
+        nodes the fractional parts between integer coordinates. 
         
         For example, an activation module or function can often be 
         drawn close to the previous module and might not require 
@@ -59,8 +73,34 @@ def can_merge_node(n:MavNode) -> bool:
     if len(in_node._out_nodes) != 1: return False  # Node is one level below a branch
     return True
     
-@overload
-def merge_graph_nodes(graph:MavGraph, 
-                      cumul_param_threshold=0.01): ...
-def merge_graph_nodes(g:MavGraph, *args, **kwargs):
-    merger = MavMerger(g, *args, **kwargs)
+def merge_graph_nodes(g:MavGraph, opts:MavOptions=MavOptions(), **kwargs):
+    """
+    Performs the merging step
+    
+    Keyword arguments may be passed either via a `MavOptions` object or
+    as-is. Using a `MavOptions` object provides better intellisense, 
+    but plain keyword arguments results in more concise code.
+
+    The following two lines are equivalent:
+    ```
+    merge_graph_nodes(g, MavOptions(merge_threshold=0.1))  
+    merge_graph_nodes(g, merge_threshold=0.1)  
+    ```
+
+    Parameters
+    ----------
+    g: MavGraph
+        Graph object produced by tracing step
+
+    merge_threshold: float
+        Determines the amount of merging to perform:
+        * Negative values disable merging altogether
+        * A value of zero causes only nodes without any parameters to be merged
+        * For values between 0 and 1, all nodes will be sorted in ascending order 
+          of the number of parameters and merged from the smallest node until
+          a cumulative fraction of merge_threshold is reached
+        * The default value of 0.01 typically causes nodes without parameters
+          and very small nodes such as normalization operations to be merged    
+    """
+    for k,v in kwargs.items(): opts.__setattr__(k,v)
+    merger = MavMerger(g, opts)

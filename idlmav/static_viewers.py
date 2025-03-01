@@ -287,7 +287,7 @@ class SemiCircleViewer:
         r = (c.to_node.y - c.from_node.y)/2  # Arc radius
         t = np.linspace(-np.pi/2, np.pi/2, num_points)
   
-        if c.offset < 0:
+        if c.offset is not None and c.offset < 0:
             xdata = cx - r*np.cos(t)
             ydata = cy - r*np.sin(t)  # Negative because y-axis is inverted on graph
         else:

@@ -1,3 +1,4 @@
+from ..mavoptions import RenderOptions
 from ..mavtypes import MavNode, MavGraph, MavConnection
 from .renderer_utils import use_straight_connection, segmented_line_coords
 import time
@@ -29,7 +30,6 @@ class WidgetRenderer:
     * An optional vertical range slider may be added for additional
       control of synchronized scrolling
     """
-    # TODO: Add drop-down boxes for node coloring and sizing: https://plotly.com/python/dropdowns/
 
     def __init__(self, g:MavGraph):
         self.g = g
@@ -74,10 +74,66 @@ class WidgetRenderer:
         self.unique_id = f'{id(self)}_{int(time.time() * 1000)}'
         self.updating_slider = False
 
-    def render(self, add_table:bool=True, add_slider:bool=True, add_overview:bool=False, num_levels_displayed:float=10, height_px=400, *args, **kwargs) -> widgets.Box:
+    def render(self, opts:RenderOptions=RenderOptions(), **kwargs) -> widgets.Box:
+        """
+        Renders the graph received during construction as a `ipywidgets.Box` object
+
+        Keyword arguments may be passed either via a `RenderOptions` object or
+        as-is. Using a `RenderOptions` object provides better intellisense, 
+        but plain keyword arguments results in more concise code.
+
+        The following two lines are equivalent:
+        ```
+        widget = WidgetRenderer(graph).render(RenderOptions(add_overview=True, height_px=500)  
+        widget = WidgetRenderer(graph).render(add_overview=True, height_px=500)  
+        ```
+
+        Parameters
+        ----------
+        add_table: bool
+            Specifies whether to include the table on the right
+            * The table summarizes the total number of learnable parameters and FLOPS
+            used by the model, as well as the totals for each operation and the
+            activations after each operation
+
+        add_slider: bool
+            Specifies whether to include a slider
+            * Without the` slider, panning and zooming are still possible using the
+            build-in controls provided by plotly
+            * For `show_widget`, the slider is displayed to the left of the figure
+            and is synchronized with plotly's built-in pan and zoom controls
+            * For `show_figure`, a horizontal slider is displayed below the figure
+            and is not synchronized with plotly's built-in pan and zoom controls.
+            Both these are limitations of the frontend-only slider provided by
+            plotly.
+        
+        add_overview: bool
+            Specifies whether to include an overview panel to indicate where the 
+            main panel is currently zoomed to
+            * The overview panel is always displayed to the left of the main panel
+            * For `show_widget`, the overview panel is synchronized with the slider
+            and plotly's built-in pan and zoom controls
+            * For `show_figure`, the overview panel only responds to slider actions
+
+        num_levels_displayed: int
+            The initial number of levels to display in the zoomed-in main panel
+            * Static figures ignore this option and displays the whole graph id
+            `add_slider` is False
+            * After creating the figure, pan and zoom controls may be used to 
+            change the number of levels displayed
+
+        height_px: int:
+            The height of the figure in pixels
+
+        Returns
+        -------       
+        `ipywidgets.Box` object that can be displayed using `IPython.display`
+        """
+        for k,v in kwargs.items(): opts.__setattr__(k,v)
+        
         # Setup parameters
         g = self.g
-        initial_y_range = self.fit_range([self.in_level+num_levels_displayed-0.5, self.in_level-0.5], self.full_y_range)
+        initial_y_range = self.fit_range([self.in_level+opts.num_levels_displayed-0.5, self.in_level-0.5], self.full_y_range)
         initial_x_range = self.full_x_range
 
         # Create a new unique ID every time this is called        
@@ -86,7 +142,7 @@ class WidgetRenderer:
         # Create the main panel
         main_panel_layout = widgets.Layout(flex = '0 1 auto', margin='0px', padding='0px', overflow='hidden')
         main_fig_layout = go.Layout(
-            width=max((self.graph_num_cols*100, 180)), height=height_px,
+            width=max((self.graph_num_cols*100, 180)), height=opts.height_px,
             plot_bgcolor='#e5ecf6',
             autosize=True,
             xaxis=dict(range=initial_x_range, showgrid=False, zeroline=False, visible=False),
@@ -137,16 +193,21 @@ class WidgetRenderer:
         self.main_fig.add_trace(line_trace)
 
         # Draw nodes
-        node_trace = self.build_node_trace(False, 'params', 'operation')
+        total_non_input_params = sum([n.params for n in g.nodes if n not in g.in_nodes])
+        total_non_input_flops = sum([n.flops for n in g.nodes if n not in g.in_nodes])
+        initially_size_by_flops = total_non_input_params == 0 and total_non_input_flops > 0
+        init_size_by = 'flops' if initially_size_by_flops else 'params'
+        init_color_by = 'operation'
+        node_trace = self.build_node_trace(False, init_size_by, init_color_by)
         self.main_fig.add_trace(node_trace)
         self.node_marker_trace = self.main_fig.data[-1]
 
         # Add table if selected
-        if add_table:
+        if opts.add_table:
             table_panel_layout = widgets.Layout(flex='0 0 auto', margin='0px', padding='0px', overflow='visible')
             table_style = self.write_table_style()
             table_html = self.write_table_html(g)
-            scrolling_table_html = f'<div id="{self.html_scrolling_table_id()}" style="height: {height_px}px; overflow: auto; width: fit-content">{table_html}</div>'
+            scrolling_table_html = f'<div id="{self.html_scrolling_table_id()}" style="height: {opts.height_px}px; overflow: auto; width: fit-content">{table_html}</div>'
             self.table_widget = widgets.Output()
             with self.table_widget:
                 display(HTML(table_style))
@@ -155,12 +216,12 @@ class WidgetRenderer:
             panels.append(self.table_panel)
             
         # Add overview window if selected
-        if add_overview:
+        if opts.add_overview:
             # Overview panel
             overview_panel_layout = widgets.Layout(flex = '0 0 auto', margin='0px', padding='0px', overflow='hidden')
             overview_fig_layout = go.Layout(
                 width=max((self.graph_num_cols*15, 45)),
-                height=height_px,
+                height=opts.height_px,
                 plot_bgcolor='#dfdfdf',
                 xaxis=dict(showgrid=False, zeroline=False, visible=False),
                 yaxis=dict(range=self.full_y_range, 
@@ -178,7 +239,7 @@ class WidgetRenderer:
             self.overview_fig.add_trace(line_trace)
                 
             # Nodes
-            overview_nodes_trace = self.build_node_trace(True, 'params', 'operation')
+            overview_nodes_trace = self.build_node_trace(True, init_size_by, init_color_by)
             self.overview_fig.add_trace(overview_nodes_trace)
             self.overview_marker_trace = self.overview_fig.data[-1]
 
@@ -201,12 +262,12 @@ class WidgetRenderer:
         # Add slider if selected
         # * Use negative values everywhere, because ipywidgets does not support
         #   inverting the direction of vertical sliders
-        if add_slider:
+        if opts.add_slider:
             slider_panel_layout = widgets.Layout(flex = '0 0 auto', margin='0px', padding='0px', overflow='visible')
             self.slider_widget = widgets.FloatRangeSlider(
                 value=[-initial_y_range[0], -initial_y_range[1]], min=-self.full_y_range[0], max=-self.full_y_range[1], 
                 step=0.01, description='', orientation='vertical', continuous_update=True,
-                layout=widgets.Layout(height=f'{height_px}px')
+                layout=widgets.Layout(height=f'{opts.height_px}px')
             )
             self.slider_widget.readout = False  # For some reason it does not seem to work if set during construction
             self.slider_panel = widgets.Box(children=[self.slider_widget], layout=slider_panel_layout)
@@ -222,7 +283,7 @@ class WidgetRenderer:
         for size_by, color_by in size_color_options:
             label = f'Size by {size_color_labels[size_by]}, color by {size_color_labels[color_by]}'
             dropdown_options.append((label, (size_by, color_by)))
-        self.dropdown_widget = widgets.Dropdown(options=dropdown_options, value=size_color_options[0], description='')
+        self.dropdown_widget = widgets.Dropdown(options=dropdown_options, value=(init_size_by,init_color_by), description='')
 
         # Create container for all panels
         # * To be displayed in Notebook using `display`
@@ -282,14 +343,14 @@ class WidgetRenderer:
         g = self.g
         if is_overview:
             if size_by=='flops':
-                sizes = [self.flops_to_dot_size_overview(n.params) for n in self.g.nodes]
+                sizes = [self.flops_to_dot_size_overview(n.flops) for n in self.g.nodes]
             elif size_by=='params':
                 sizes = [self.params_to_dot_size_overview(n.params) for n in self.g.nodes]
             else:
                 raise ValueError(f'Unknown size_by: {size_by}')
         else:
             if size_by=='flops':
-                sizes = [self.flops_to_dot_size(n.params) for n in self.g.nodes]
+                sizes = [self.flops_to_dot_size(n.flops) for n in self.g.nodes]
             elif size_by=='params':
                 sizes = [self.params_to_dot_size(n.params) for n in self.g.nodes]
             else:
@@ -314,7 +375,7 @@ class WidgetRenderer:
         return (n.name, n.operation, self.fmt_activ(n.activations), self.fmt_large(n.params), self.fmt_large(n.flops))
 
     def node_arg_data(self, n:MavNode):
-        return (n.metadata['args'], n.metadata['kwargs'])
+        return (n.metadata.get('args',''), n.metadata.get('kwargs',''))
 
     def params_to_norm_val(self, params):
         """
@@ -371,7 +432,7 @@ class WidgetRenderer:
         elif color_by == 'flops': 
             return self.flops_to_norm_val(node.flops)
         elif color_by == 'params': 
-            return self.params_to_norm_val(node.flops)
+            return self.params_to_norm_val(node.params)
         else: 
             raise ValueError(f'Unknown color style: {color_by}')
 

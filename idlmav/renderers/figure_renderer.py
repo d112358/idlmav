@@ -1,3 +1,4 @@
+from ..mavoptions import RenderOptions
 from ..mavtypes import MavGraph, MavNode, MavConnection
 from .renderer_utils import use_straight_connection, segmented_line_coords
 import numpy as np
@@ -6,21 +7,28 @@ from plotly.subplots import make_subplots
 
 class FigureRenderer:
     """
-    This viewer avoids `go.FigureWidget` and `ipywidgets`, making it 
-    suitable for use when releasing a model, since users browsing 
-    through models on GitHub without any running Jupyter kernel or 
-    dynamic components will still be able to see all output produced 
-    by this viewer (e.g. using nbviewer).
+    Class that renders a graph as a `go.Figure` object
+
+    This renderer avoids `go.FigureWidget` and `ipywidgets`, making it 
+    portable so that users browsing through models without any running 
+    Jupyter kernel or backend will still be able to see all output produced 
+    by this renderer (e.g. using nbviewer).
 
     Available interactions and limitations:
     * Hover interactions are available, but no click events
+    * Standard pan and zoom controls provided by Plotly are available
     * An optional table is available, but no interaction between the 
-      graph and the table is available.
+      graph and the table.
     * An optional scroll bar is available, but unfortunately only a 
       horizontal one
+    * An optional overview panel is available to show the zoomed-out
+      model and highlight the area into which the main panel is zoomed.
+      This panel is not clickable and is only updated from the optional 
+      slider, not from the standard Plotly pan and zoom controls
+    * A dropdown menu is available to select different criteria for node
+      marker sizing and coloring, e.g. by operation, by number of 
+      parameters, by number of FLOPS
     """
-
-    # TODO: Add drop-down boxes for node coloring and sizing: https://plotly.com/python/dropdowns/
 
     def __init__(self, g:MavGraph):
         self.g = g
@@ -49,22 +57,81 @@ class FigureRenderer:
         self.node_trace_idx:int     = None
         self.overview_trace_idx:int = None
 
-    def render(self, add_table:bool=True, add_slider:bool=False, add_overview:bool=False, num_levels_displayed:float=10, *args, **kwargs):
+    def render(self, opts:RenderOptions=RenderOptions(), **kwargs):
+        """
+        Renders the graph received during construction as a `go.Figure` object
+
+        Keyword arguments may be passed either via a `RenderOptions` object or
+        as-is. Using a `RenderOptions` object provides better intellisense, 
+        but plain keyword arguments results in more concise code.
+
+        The following two lines are equivalent:
+        ```
+        fig = FigureRenderer(graph).render(RenderOptions(add_overview=True, height_px=500))  
+        fig = FigureRenderer(graph).render(add_overview=True, height_px=500)  
+        ```
+
+        Parameters
+        ----------
+        add_table: bool
+            Specifies whether to include the table on the right
+            * The table summarizes the total number of learnable parameters and FLOPS
+            used by the model, as well as the totals for each operation and the
+            activations after each operation
+
+        add_slider: bool
+            Specifies whether to include a slider
+            * Without the` slider, panning and zooming are still possible using the
+            build-in controls provided by plotly
+            * For `show_widget`, the slider is displayed to the left of the figure
+            and is synchronized with plotly's built-in pan and zoom controls
+            * For `show_figure`, a horizontal slider is displayed below the figure
+            and is not synchronized with plotly's built-in pan and zoom controls.
+            Both these are limitations of the frontend-only slider provided by
+            plotly.
+        
+        add_overview: bool
+            Specifies whether to include an overview panel to indicate where the 
+            main panel is currently zoomed to
+            * The overview panel is always displayed to the left of the main panel
+            * For `show_widget`, the overview panel is synchronized with the slider
+            and plotly's built-in pan and zoom controls
+            * For `show_figure`, the overview panel only responds to slider actions
+
+        num_levels_displayed: int
+            The initial number of levels to display in the zoomed-in main panel
+            * Static figures ignore this option and displays the whole graph id
+            `add_slider` is False
+            * After creating the figure, pan and zoom controls may be used to 
+            change the number of levels displayed
+
+        height_px: int:
+            The height of the figure in pixels
+
+        Returns
+        -------
+        `plotly.graph_objects.Figure` object that can be displayed using `.show()`
+        or exported using `.write_html()`
+        """
+        for k,v in kwargs.items(): opts.__setattr__(k,v)
+
+        # Setup parameters
         g = self.g
-        margin = 0.25
+        x_margin = 0.5  # Higher to cater for skip connections with offsets to avoid overlapping
+        y_margin = 0.25
     
         # Create figure, possibly with subplots
         num_subplots = 1 
         subplot_specs=[[{"type": "scatter"}]]
         column_widths = [self.graph_num_cols]
         self.main_sp_col = 1
-        if add_table:
+        if opts.add_table:
             table_col_scale_factor = 1.8  # If set to 1, a table column takes up the same width as a column of nodes in the graph
             num_subplots += 1
             subplot_specs[0] += [{"type": "table"}]
             column_widths.append(table_col_scale_factor*len(self.column_headings()))
             self.table_sp_col = 2
-        if add_overview:
+        if opts.add_overview:
             num_subplots += 1
             subplot_specs[0].insert(0, {"type": "scatter"})
             column_widths.insert(0, self.graph_num_cols / 3)
@@ -92,22 +159,27 @@ class FigureRenderer:
             showlegend=False
         )
         self.fig.add_trace(line_trace, row=1, col=self.main_sp_col)
-        if add_overview: self.fig.add_trace(line_trace, row=1, col=self.overview_sp_col)
+        if opts.add_overview: self.fig.add_trace(line_trace, row=1, col=self.overview_sp_col)
 
         # Draw nodes
-        node_trace = self.build_node_trace(False, 'params', 'operation')
+        total_non_input_params = sum([n.params for n in g.nodes if n not in g.in_nodes])
+        total_non_input_flops = sum([n.flops for n in g.nodes if n not in g.in_nodes])
+        initially_size_by_flops = total_non_input_params == 0 and total_non_input_flops > 0
+        size_by = 'flops' if initially_size_by_flops else 'params'
+        color_by = 'operation'
+        node_trace = self.build_node_trace(False, size_by, color_by)
         self.fig.add_trace(node_trace, row=1, col=self.main_sp_col)
         self.node_trace_idx = len(self.fig.data)-1
-        if add_overview:
-            overview_trace = self.build_node_trace(True, 'params', 'operation')
+        if opts.add_overview:
+            overview_trace = self.build_node_trace(True, size_by, color_by)
             self.fig.add_trace(overview_trace, row=1, col=self.overview_sp_col)
             self.overview_trace_idx = len(self.fig.data)-1
 
         # Draw overview shape
-        if add_overview:
+        if opts.add_overview:
             self.fig.add_shape(type="rect",
                 xref="x", yref="y",
-                x0=self.min_x-margin, x1=self.max_x+margin, y0=self.in_level-margin, y1=self.in_level-margin+num_levels_displayed,
+                x0=self.min_x-x_margin, x1=self.max_x+x_margin, y0=self.in_level-y_margin, y1=self.in_level-y_margin+opts.num_levels_displayed,
                 line=dict(color="#000000"),
                 row=1, col=self.overview_sp_col
             )
@@ -115,11 +187,11 @@ class FigureRenderer:
         # Update layout and display direction
         self.fig.update_xaxes(showgrid=False, zeroline=False, tickmode='array', tickvals=[])
         self.fig.update_yaxes(showgrid=False, zeroline=False, tickmode='array', tickvals=[])
-        self.update_range(self.main_sp_col, [self.min_x-margin, self.max_x+margin], [self.out_level+margin, self.in_level-margin])
-        if add_overview: self.update_range(self.overview_sp_col, [self.min_x-margin*2, self.max_x+margin*2], [self.out_level+margin*2, self.in_level-margin*2])
+        self.update_range(self.main_sp_col, [self.min_x-x_margin, self.max_x+x_margin], [self.out_level+y_margin, self.in_level-y_margin])
+        if opts.add_overview: self.update_range(self.overview_sp_col, [self.min_x-x_margin*2, self.max_x+x_margin*2], [self.out_level+y_margin*2, self.in_level-y_margin*2])
 
         # Add table if selected
-        if add_table:
+        if opts.add_table:
             table_trace = go.Table(
                 header=dict(
                     values=self.column_headings(),
@@ -137,14 +209,14 @@ class FigureRenderer:
             self.fig.add_trace(table_trace, row=1, col=self.table_sp_col)
         
         # Add dropdown menu for marker sizes and colors
-        self.fig.update_layout(updatemenus=[self.build_styling_menu(pad_t=8)])
+        self.fig.update_layout(updatemenus=[self.build_styling_menu(pad_t=8, initially_size_by_flops=initially_size_by_flops)])
 
         # Add slider if selected
-        if add_slider:
-            total_levels = self.out_level - self.in_level + margin*2
-            num_slider_steps = int(total_levels / num_levels_displayed * 3.5)
-            self.fig.update_layout(sliders=[self.build_overview_slider(pad_t=48, margin=margin, num_levels_displayed=num_levels_displayed, num_steps=num_slider_steps)])
-            self.update_range(self.main_sp_col, [self.min_x-margin, self.max_x+margin], [self.in_level+num_levels_displayed-margin, self.in_level-margin])
+        if opts.add_slider:
+            total_levels = self.out_level - self.in_level + y_margin*2
+            num_slider_steps = int(total_levels / opts.num_levels_displayed * 3.5)
+            self.fig.update_layout(sliders=[self.build_overview_slider(pad_t=48, x_margin=x_margin, y_margin=y_margin, num_levels_displayed=opts.num_levels_displayed, num_steps=num_slider_steps)])
+            self.update_range(self.main_sp_col, [self.min_x-x_margin, self.max_x+x_margin], [self.in_level+opts.num_levels_displayed-y_margin, self.in_level-y_margin])
 
         # Update margin and modebar buttons
         self.fig.update_layout(margin=dict(l=0, r=0, t=0, b=0))
@@ -180,14 +252,14 @@ class FigureRenderer:
         g = self.g
         if is_overview:
             if size_by=='flops':
-                sizes = [self.flops_to_dot_size_overview(n.params) for n in self.g.nodes]
+                sizes = [self.flops_to_dot_size_overview(n.flops) for n in self.g.nodes]
             elif size_by=='params':
                 sizes = [self.params_to_dot_size_overview(n.params) for n in self.g.nodes]
             else:
                 raise ValueError(f'Unknown size_by: {size_by}')
         else:
             if size_by=='flops':
-                sizes = [self.flops_to_dot_size(n.params) for n in self.g.nodes]
+                sizes = [self.flops_to_dot_size(n.flops) for n in self.g.nodes]
             elif size_by=='params':
                 sizes = [self.params_to_dot_size(n.params) for n in self.g.nodes]
             else:
@@ -208,26 +280,28 @@ class FigureRenderer:
             method="restyle"
         )
 
-    def build_styling_menu(self, pad_t=0):
+    def build_styling_menu(self, pad_t=0, initially_size_by_flops:bool=False):
         size_color_options = [('params','operation'),
                               ('flops','operation'),
                               ('params','flops'),
                               ('flops','params')]
         menu_buttons = [self.build_menu_button(size_by, color_by) for (size_by, color_by) in size_color_options]
+        active = 1 if initially_size_by_flops else 0
         return dict(buttons=menu_buttons, showactive=True, direction="up",
                     pad=dict(l=0, r=0, t=pad_t, b=0),
                     x=0, xanchor="left",
-                    y=0, yanchor="top")
+                    y=0, yanchor="top",
+                    active=active)
 
-    def build_overview_slider(self, pad_t=0, margin=0.25, num_levels_displayed=2, num_steps=20):
+    def build_overview_slider(self, pad_t=0, x_margin=0.5, y_margin=0.25, num_levels_displayed=2, num_steps=20):
         steps = []
         yaxis_varname = self.ax_var_name('yaxis', self.main_sp_col)
-        for i in np.linspace(self.in_level-margin, self.out_level+margin-num_levels_displayed, num_steps):
+        for i in np.linspace(self.in_level-y_margin, self.out_level+y_margin-num_levels_displayed, num_steps):
             step = dict(
                 method="relayout",
                 args=[dict({
                     "shapes":[dict(type="rect", xref="x", yref="y",line=dict(color="#000000"),
-                        x0=self.min_x-margin, y0=i, x1=self.max_x+margin, y1=i+num_levels_displayed,
+                        x0=self.min_x-x_margin, y0=i, x1=self.max_x+x_margin, y1=i+num_levels_displayed,
                     )],
                     yaxis_varname:dict(range=[i+num_levels_displayed, i], showgrid=False, zeroline=False, tickmode='array', tickvals=[]),
                 })],
@@ -271,7 +345,7 @@ class FigureRenderer:
         return (n.name, n.operation, self.fmt_activ(n.activations), self.fmt_large(n.params), self.fmt_large(n.flops))
 
     def node_arg_data(self, n:MavNode):
-        return (n.metadata['args'], n.metadata['kwargs'])
+        return (n.metadata.get('args',''), n.metadata.get('kwargs',''))
 
     def params_to_norm_val(self, params):
         """
@@ -330,7 +404,7 @@ class FigureRenderer:
         elif color_by == 'flops': 
             return self.flops_to_norm_val(node.flops)
         elif color_by == 'params': 
-            return self.params_to_norm_val(node.flops)
+            return self.params_to_norm_val(node.params)
         else: 
             raise ValueError(f'Unknown color style: {color_by}')
         

@@ -1,4 +1,5 @@
 from .idlmav import MAV
+from .mavoptions import MavOptions, RenderOptions
 from .tracing import MavTracer
 from .merging import merge_graph_nodes
 from .coloring import color_graph_nodes
@@ -9,6 +10,8 @@ from .mavutils import available_renderers, plotly_renderer
 
 __all__ = (
     "MAV", 
+    "MavOptions",
+    "RenderOptions",
     "MavTracer", 
     "merge_graph_nodes", 
     "color_graph_nodes", 
