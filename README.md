@@ -10,7 +10,24 @@ Interactive deep learning model architecture visualization (IDLMAV) is a tool th
 * Iteratively designing a model and viewing activations, parameter counts and FLOPS "so far" before the whole model has been defined
 * Document a model in a notebook and generate the architecture in such a way that it is viewable on without a running kernel, e.g. in [nbviewer](https://nbviewer.org/)
 * Visualize 3rd party models when importing them into a notebook
-* Scan a model for potential places to save parameters or FLOPS
+* Finding hotspots (parameters or FLOPS) in a model for optimization purposes
+
+# Static HTML examples
+These have limited interactivity and synchronization between panels compared to the interactive widgets (see below), but they provide good examples of how models are visualized.
+
+| Model | Basic | Verbose | Basic, scrolling | Verbose, scrolling |
+| ----- | ----- | ------- | ---------------- | ------------------ |
+| ResNet18 | [View](https://d112358.github.io/idlmav/export_examples/resnet18.html) | [View](https://d112358.github.io/idlmav/export_examples/resnet18_verbose.html) | [View](https://d112358.github.io/idlmav/export_examples/resnet18_slider.html) | [View](https://d112358.github.io/idlmav/export_examples/resnet18_verbose_slider.html)|
+| ResNet34 | [View](https://d112358.github.io/idlmav/export_examples/resnet34.html) | [View](https://d112358.github.io/idlmav/export_examples/resnet34_verbose.html) | [View](https://d112358.github.io/idlmav/export_examples/resnet34_slider.html) | [View](https://d112358.github.io/idlmav/export_examples/resnet34_verbose_slider.html)|
+| ConvNeXt small | [View](https://d112358.github.io/idlmav/export_examples/convnext_small.html) | [View](https://d112358.github.io/idlmav/export_examples/convnext_small_verbose.html) | [View](https://d112358.github.io/idlmav/export_examples/convnext_small_slider.html) | [View](https://d112358.github.io/idlmav/export_examples/convnext_small_verbose_slider.html)|
+| ViT B/16 | [View](https://d112358.github.io/idlmav/export_examples/vit_b_16_small.html) | [View](https://d112358.github.io/idlmav/export_examples/vit_b_16_small_verbose.html) | [View](https://d112358.github.io/idlmav/export_examples/vit_b_16_small_slider.html) | [View](https://d112358.github.io/idlmav/export_examples/vit_b_16_small_verbose_slider.html)|
+| HR-Net W18 | [View](https://d112358.github.io/idlmav/export_examples/hrnet_w18.html) | [View](https://d112358.github.io/idlmav/export_examples/hrnet_w18_verbose.html) | [View](https://d112358.github.io/idlmav/export_examples/hrnet_w18_slider.html) | [View](https://d112358.github.io/idlmav/export_examples/hrnet_w18_verbose_slider.html)|
+| YOLOv11 Nano | [View](https://d112358.github.io/idlmav/export_examples/yolov11n.html) | [View](https://d112358.github.io/idlmav/export_examples/yolov11n_verbose.html) | [View](https://d112358.github.io/idlmav/export_examples/yolov11n_slider.html) | [View](https://d112358.github.io/idlmav/export_examples/yolov11n_verbose_slider.html)|
+| BLIP vision model | [View](https://d112358.github.io/idlmav/export_examples/blip_visionmodel.html) | [View](https://d112358.github.io/idlmav/export_examples/blip_visionmodel_verbose.html) | [View](https://d112358.github.io/idlmav/export_examples/blip_visionmodel_slider.html) | [View](https://d112358.github.io/idlmav/export_examples/blip_visionmodel_verbose_slider.html)|
+| Whisper-tiny | [View](https://d112358.github.io/idlmav/export_examples/whisper_tiny.html) | [View](https://d112358.github.io/idlmav/export_examples/whisper_tiny_verbose.html) | [View](https://d112358.github.io/idlmav/export_examples/whisper_tiny_slider.html) | [View](https://d112358.github.io/idlmav/export_examples/whisper_tiny_verbose_slider.html)|
+| BERT mini | [View](https://d112358.github.io/idlmav/export_examples/bert_mini.html) | [View](https://d112358.github.io/idlmav/export_examples/bert_mini_verbose.html) | [View](https://d112358.github.io/idlmav/export_examples/bert_mini_slider.html) | [View](https://d112358.github.io/idlmav/export_examples/bert_mini_verbose_slider.html)|
+| ModernBERT base | [View](https://d112358.github.io/idlmav/export_examples/ModernBERT.html) | [View](https://d112358.github.io/idlmav/export_examples/ModernBERT_verbose.html) | [View](https://d112358.github.io/idlmav/export_examples/ModernBERT_slider.html) | [View](https://d112358.github.io/idlmav/export_examples/ModernBERT_verbose_slider.html)|
+
 
 # Installation
 
@@ -33,11 +50,11 @@ mav = MAV(model, x, device=device)
 * Based on [plotly.graph_objects.Figure](https://plotly.com/python/creating-and-updating-figures/#figures-as-graph-objects)
 * No dependency on `ipywidgets` or `plotly.graph_objects.FigureWidget` for portability reasons
 * Displays correctly without the need of a running backend/kernel, e.g. in [nbviewer](https://nbviewer.org/)
-* Interactions limited to plotly's built-in hover, pan and zoom mechanisms
+* Interactions limited to hover, pan and zoom, slider and dropdown menu provided by Plotly
 * No synchronization between graph and table
 ```python
 with plotly_renderer('notebook_connected'):
-    mav.show_figure(add_slider=True)
+    mav.show_figure()
 ```
 ![Portable figure](https://github.com/d112358/idlmav/raw/main/images/portable_figure.png)
 
@@ -49,7 +66,7 @@ with plotly_renderer('notebook_connected'):
 * Limited portability expected to fluctuate over time on different environments
 ```python
 with plotly_renderer('notebook_connected'):
-    mav.show_widget(add_overview=True)
+    mav.show_widget(add_slider=True, add_overview=True)
 ```
 ![Interactive widget](https://github.com/d112358/idlmav/raw/main/images/interactive_widget.png)
 
@@ -60,7 +77,7 @@ with plotly_renderer('notebook_connected'):
   - `False` (default): The exported HTML is small, but requires a working internet connection to display correctly
   - `True`: The exported HTML is around 4MB in size and displays correctly without a working internet connection
 ```python
-mav.export_html('resnet18.html', offline=False)
+mav.export_static_html('resnet18.html', offline=False)
 ```
 
 ## Specifying colors
@@ -114,7 +131,7 @@ with plotly_renderer('notebook_connected'):
 from idlmav import MavTracer, merge_graph_nodes, layout_graph_nodes, color_graph_nodes, WidgetRenderer
 from IPython.display import display
 
-tracer = MavTracer(model, x, device)
+tracer = MavTracer(model, x, device=device)
 merge_graph_nodes(tracer.g)
 layout_graph_nodes(tracer.g)
 color_graph_nodes(tracer.g)
@@ -126,14 +143,16 @@ display(renderer.render())
 # Features
 * Works on incomplete models and models without a successful forward pass
 * Can provide a portable figure with basic interactivity that does not require a running kernel
-* Can provide an interactive widget with synchronization between panels
+* Can provide an interactive widget with synchronization between panels and limited portability
 * Customizable color palette and node or category color mappings
 * Customizable node merging behaviour
 * Interactions (portable figure)
   - Hover over modules to see activation sizes, number of parameters and FLOPS
+  - Pan and zoom provided by Plotly (not synchronized)
   - Scrollable table (not synchronized)
   - Horizontal slider provided by Plotly (not synchronized)
-  - Pan and zoom provided by Plotly (not synchronized)
+  - Overview window showing full model (only synchronized to slider)
+  - Dropdown menu to select node coloring and sizing criteria
 * Interactions (interactive widget)
   - Hover over modules to see activation sizes, number of parameters and FLOPS
   - Synchronized scrolling between table and graph
@@ -141,34 +160,49 @@ display(renderer.render())
   - Clickable overview window showing full model
   - Range slider from ipywidgets with synchronized pan and zoom functionality
   - Table and sliders synchronize with Plotly's built-in pan and zoom functionality
+  - Dropdown menu to select node coloring and sizing criteria
 
 # Limitations
 * Inherited [limitations of symbolic tracing](https://pytorch.org/docs/stable/fx.html#limitations-of-symbolic-tracing) from torch.fx
-  - Dynamic control flow
-  - Non-torch functions
+  - Models with dynamic control flow can only be traced using `torch.compile`
+  - Models containing non-torch functions can only be traced using `torch.compile` and only up to the non-torch function
+* Inherited from `torch.compile`
+  - In models parsed with `torch.compile`, classes are flattened into functions and learnable parameters are passed as additional inputs
 * Inherited from ipywidgets:
   - Interactive widget requires a running kernel to dynamically create DOM elements
-  - Portable figure has no synchronization between panels
 * Inherited from plotly
   - Portable figure can only support a horizontal slider
+  - On portable figure, overview panel synchronizas only to slider, not to Plotly pan & zoom controls
 * Environment-specific limitations
   - Kaggle currently (Dec 2024) seems to have trouble displaying `go.FigureWidget`, so only the portable figure is available there
 
 # Planned updates
 * Make the primary direction (down/right/up/left) configurable
 * Allow the user to specify a latent node at which the graph changes direction (e.g. for autoencoder / UNet architectures)
-* Add drop-down boxes to dynamically toggle between coloring and sizing modes (e.g. color by node operation, number of parameters, FLOPS)
 
 # Contributing
-Any contributions are welcome, but custom renderers to improve the user experience on specific platforms / environments will be especially appreciated!
-* The development environment is described in [setup_vscode_wsl.ipynb](https://github.com/d112358/idlmav/blob/main/environments/setup_vscode_wsl.ipynb)
-  - This should be easy to get going in native Linux as well, just skipping the WSL parts
+Reports of any issues encountered as most welcome! 
+Please provide code and a brief description of your environment to make these easy to reproduce and to verify fixes
+
+Please also make issues easy to categorize by being specific about the category they belong to:
+* An error occurred during parsing, layout or MAV object instantiation
+* The parsing, layout or MAV object instantiation step took forever to execute
+* An error occurred during rendering
+* The rendered graph is a poor / inaccurate representation of the model
+
+Any contributions are also welcome and contributions in the following categories will be especially appreciated!
+* Custom renderers to improve the user experience on different platforms / environments
+* Unit tests
+
+The development environment is described in [setup_vscode_wsl.ipynb](https://github.com/d112358/idlmav/blob/main/environments/setup_vscode_wsl.ipynb)
+* This should be easy to get going in native Linux as well, just skipping the WSL parts
 * The build is described in and executed from [build_steps.ipynb](https://github.com/d112358/idlmav/blob/main/environments/build_steps.ipynb)
 * Unit tests still need to be developed. At the moment, the following notebooks are used for manual / visual testing:
   - [02_test_layout.ipynb](https://github.com/d112358/idlmav/blob/main/nbs/02_test_layout.ipynb)  
   - [06_test_rendering.ipynb](https://github.com/d112358/idlmav/blob/main/nbs/06_test_rendering.ipynb)  
   - [10_test_tracing.ipynb](https://github.com/d112358/idlmav/blob/main/nbs/10_test_tracing.ipynb)  
-  - [12_test_idlmav.ipynb](https://github.com/d112358/idlmav/blob/main/nbs/12_test_idlmav.ipynb)  
+  - [12_test_idlmav.ipynb](https://github.com/d112358/idlmav/blob/main/nbs/12_test_idlmav.ipynb)
+  - [20_test_export_misc_models.ipynb](https://github.com/d112358/idlmav/blob/main/nbs/20_test_export_misc_models.ipynb)
 
 # License
 This repository is released under the MIT license. See [LICENSE](https://github.com/d112358/idlmav/blob/main/LICENSE) for additional details.
