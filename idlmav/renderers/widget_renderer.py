@@ -51,6 +51,14 @@ class WidgetRenderer:
         self.node_marker_trace     : BaseTraceType = None
         self.overview_marker_trace : BaseTraceType = None
 
+        # Options
+        self.size_color_options = [('params','operation'),
+                                   ('flops','operation'),
+                                   ('params','flops'),
+                                   ('flops','params')]
+        self.continuous_colorscale = 'Bluered'
+        self.size_color_idx: int = None
+
         # Derived parameters
         self.in_level = min([n.y for n in g.in_nodes])
         self.out_level = max([n.y for n in g.out_nodes])
@@ -125,6 +133,27 @@ class WidgetRenderer:
         height_px: int:
             The height of the figure in pixels
 
+        continuous_colorscale: any
+            This palette is used when coloring nodes by the number of parameters or
+            FLOPS. The value is passed as-is to the `colorscale` field of the
+            `marker` object (see https://plotly.com/python/colorscales/#color-scale-for-scatter-plots-with-graph-objects).
+            It can take any form accepted by Plotly, but the easiest is a single
+            string such as "Viridis", "Thermal", etc. See https://plotly.com/python/builtin-colorscales/
+            for more options.
+
+        size_color_idx: int or None
+            Determines the criteria used for the size and color of node markers:
+            * 0: Size by number of parameters, color by operation 
+            * 1: Size by number of FLOPS, color by operation 
+            * 2: Size by number of parameters, color by number of FLOPS 
+            * 3: Size by number of FLOPS, color by number of parameters
+
+            This can also be changed interactively using a dropdown menu. This 
+            parameter simply determines the initial state of the dropdown menu.
+
+            If unassigned or None, this defaults to 1 if `keep_internal_nodes` was
+            selected during tracing or 0 otherwise.
+
         Returns
         -------       
         `ipywidgets.Box` object that can be displayed using `IPython.display`
@@ -133,6 +162,8 @@ class WidgetRenderer:
         
         # Setup parameters
         g = self.g
+        self.continuous_colorscale = opts.continuous_colorscale
+        self.size_color_idx = opts.size_color_idx
         initial_y_range = self.fit_range([self.in_level+opts.num_levels_displayed-0.5, self.in_level-0.5], self.full_y_range)
         initial_x_range = self.full_x_range
 
@@ -193,11 +224,12 @@ class WidgetRenderer:
         self.main_fig.add_trace(line_trace)
 
         # Draw nodes
-        total_non_input_params = sum([n.params for n in g.nodes if n not in g.in_nodes])
-        total_non_input_flops = sum([n.flops for n in g.nodes if n not in g.in_nodes])
-        initially_size_by_flops = total_non_input_params == 0 and total_non_input_flops > 0
-        init_size_by = 'flops' if initially_size_by_flops else 'params'
-        init_color_by = 'operation'
+        if self.size_color_idx is None:
+            total_non_input_params = sum([n.params for n in g.nodes if n not in g.in_nodes])
+            total_non_input_flops = sum([n.flops for n in g.nodes if n not in g.in_nodes])
+            initially_size_by_flops = total_non_input_params == 0 and total_non_input_flops > 0
+            self.size_color_idx = 1 if initially_size_by_flops else 0
+        init_size_by, init_color_by = self.size_color_options[self.size_color_idx]
         node_trace = self.build_node_trace(False, init_size_by, init_color_by)
         self.main_fig.add_trace(node_trace)
         self.node_marker_trace = self.main_fig.data[-1]
@@ -274,13 +306,9 @@ class WidgetRenderer:
             panels.insert(0, self.slider_panel)
 
         # Add dropdown menu for marker sizes and colors
-        size_color_options = [('params','operation'),
-                              ('flops','operation'),
-                              ('params','flops'),
-                              ('flops','params')]
         size_color_labels = dict(operation='operation', params='params', flops='FLOPS')
         dropdown_options = []
-        for size_by, color_by in size_color_options:
+        for size_by, color_by in self.size_color_options:
             label = f'Size by {size_color_labels[size_by]}, color by {size_color_labels[color_by]}'
             dropdown_options.append((label, (size_by, color_by)))
         self.dropdown_widget = widgets.Dropdown(options=dropdown_options, value=(init_size_by,init_color_by), description='')
@@ -358,7 +386,7 @@ class WidgetRenderer:
         
         colors = [self.get_node_color(n, color_by) for n in self.g.nodes]
 
-        return dict(size=sizes, color=colors, colorscale='Bluered')
+        return dict(size=sizes, color=colors, colorscale=self.continuous_colorscale)
 
     def column_headings(self):
         total_params = sum([n.params for n in self.g.nodes])

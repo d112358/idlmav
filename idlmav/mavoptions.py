@@ -29,16 +29,17 @@ class MavOptions:
           module where `torch.compile` will produce a `conv2d()` function call
           with trainable parameters in an external node.
 
-    show_param_nodes: bool
-        Determines whether nodes representing trainable parameters should be left as-is in the computation graph. 
-        * If set to `False`, IDLMAV attempts to propagate the trainable parameters
-          to the first operation that uses them. Where trainable parameters are
-          shared by multiple operations, propagation stops and the parameter
-          node is connected to the operations using it
-        * If set to `True`, all pre-processing steps applied to trainable 
-          parameters are shown in the computation graph. This often includes
-          many tensor shape manipulation steps.
-        * `show_param_nodes` is applicable to computational graphs traced with
+    keep_internal_nodes: bool
+        After tracing with `torch.compile`, some nodes represent trainable 
+        parameters, buffers, constants and manipulations of these that are 
+        usually considered internal to a module. Let's call these internal
+        nodes and define them as nodes outside the main branch (the set of all 
+        nodes reachable from nodes representing inputs to the model)
+        * If set to `False`, IDLMAV attempts to propagate internal nodes to the 
+          first operation on the main branch that uses them.
+        * If set to `True`, internal nodes are reported as-is in the final graph.  
+        
+        `keep_internal_nodes` is applicable to computational graphs traced with
           `torch.compile` (either as a result of `torch.fx.symbolic_trace failing
           or of setting `try_fx_first` to False).
 
@@ -50,7 +51,7 @@ class MavOptions:
     device: str = None
     merge_threshold: float = 0.01
     try_fx_first: bool = True
-    show_param_nodes: bool = False
+    keep_internal_nodes: bool = False
     concrete_args: Mapping[str, Any] = None
 
 @dataclass
@@ -117,6 +118,27 @@ class RenderOptions:
         fixed_color_map={'Convolution':7, 'add()':0, 'nn.MaxPool2d':5}
         ```
 
+    continuous_colorscale: any
+        This palette is used when coloring nodes by the number of parameters or
+        FLOPS. The value is passed as-is to the `colorscale` field of the
+        `marker` object (see https://plotly.com/python/colorscales/#color-scale-for-scatter-plots-with-graph-objects).
+        It can take any form accepted by Plotly, but the easiest is a single
+        string such as "Viridis", "Thermal", etc. See https://plotly.com/python/builtin-colorscales/
+        for more options.
+
+    size_color_idx: int or None
+        Determines the criteria used for the size and color of node markers:
+        * 0: Size by number of parameters, color by operation 
+        * 1: Size by number of FLOPS, color by operation 
+        * 2: Size by number of parameters, color by number of FLOPS 
+        * 3: Size by number of FLOPS, color by number of parameters
+
+        This can also be changed interactively using a dropdown menu. This 
+        parameter simply determines the initial state of the dropdown menu.
+
+        If unassigned or None, this defaults to 1 if `keep_internal_nodes` was
+        selected during tracing or 0 otherwise.
+
     export_for_offline_use: bool
         Specifies how to include Plotly library in exported HTML
         * If `True`, the entire plotly library (approximately 4 MB) is included
@@ -132,4 +154,6 @@ class RenderOptions:
     palette: Union[str, List[str]] = 'large'
     avoid_palette_idxs: Set[int] = set([]),
     fixed_color_map: Mapping[str,int] = field(default_factory=dict)
+    continuous_colorscale: Any = 'Bluered'
+    size_color_idx: int = None
     export_for_offline_use: bool = False

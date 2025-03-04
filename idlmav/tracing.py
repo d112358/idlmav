@@ -138,19 +138,19 @@ class MavTracer:
               module where `torch.compile` will produce a `conv2d()` function call
               with trainable parameters in an external node.
 
-        show_param_nodes: bool
-            Determines whether nodes representing trainable parameters should be left 
-            as-is in the computation graph. 
-            * If set to `False`, IDLMAV attempts to propagate the trainable parameters
-              to the first operation that uses them. Where trainable parameters are
-              shared by multiple operations, propagation stops and the parameter
-              node is connected to the operations using it
-            * If set to `True`, all pre-processing steps applied to trainable 
-              parameters are shown in the computation graph. This often includes
-              many tensor shape manipulation steps.
-            * `show_param_nodes` is applicable to computational graphs traced with
-              `torch.compile` (either as a result of `torch.fx.symbolic_trace failing
-              or of setting `try_fx_first` to False).
+        keep_internal_nodes: bool
+            After tracing with `torch.compile`, some nodes represent trainable 
+            parameters, buffers, constants and manipulations of these that are 
+            usually considered internal to a module. Let's call these internal
+            nodes and define them as nodes outside the main branch (the set of all 
+            nodes reachable from nodes representing inputs to the model)
+            * If set to `False`, IDLMAV attempts to propagate internal nodes to the 
+            first operation on the main branch that uses them.
+            * If set to `True`, internal nodes are reported as-is in the final graph.  
+            
+            `keep_internal_nodes` is applicable to computational graphs traced with
+            `torch.compile` (either as a result of `torch.fx.symbolic_trace failing
+            or of setting `try_fx_first` to False).
 
         concrete_args: dict[str, any]
             If specified, this argument is passed as-is to `torch.fx.symbolic_trace` 
@@ -166,14 +166,17 @@ class MavTracer:
             self.inputs = inputs
         self.concrete_args = opts.concrete_args
         self.try_fx_first = opts.try_fx_first
-        self.show_param_nodes = opts.show_param_nodes
+        self.keep_internal_nodes = opts.keep_internal_nodes
         self.graphs:List[Tuple[fx.GraphModule, List[torch.Tensor]]] = []
         self.gm: fx.GraphModule = None
         self.interp: ShapeMacInterpreter = None
         self.g: MavGraph = None
-        self.input_sizes:Mapping[fx.Node, int] = {}
-        self.param_counts : Mapping[fx.Node, int] = {}
+        self.input_sizes:Mapping[fx.Node,int] = {}
+        self.param_counts : Mapping[fx.Node,int] = {}
         self.target_names : Mapping[fx.Node,str] = {}
+        self.entry_types : Mapping[fx.Node,str] = {}
+        self.exit_types : Mapping[fx.Node,str] = {}
+        self.propagated_params : Mapping[fx.Node,int] = {}
         self.err_node: fx.Node = None
         self.long_name_replacements:Mapping[str,str] = {}
         self.long_name_repl_pattern:re.Pattern = None
@@ -299,36 +302,38 @@ class MavTracer:
         * `entry_type=='normal'`: Node is downstream from a model input node 
         * `entry_type=='learnable'`: Node is downstream from a node representing learnable parameters 
         * `entry_type=='learn-split`': Node is downstream from a sub-branch of a learnable parameter node, or split occurs at node
-        * `entry_type=='specia`l': Node is not downstream from an input node or learnable parameter node 
+        * `entry_type=='buffer'`: Node is downstream from a node representing a buffer
+        * `entry_type=='special': Node is not downstream from an input node or learnable parameter node 
         * `exit_type=='normal`': Node is upstream from a model output node
         * `exit_type=='special'`: Node is not upstream from a model output node
 
-        Returns 3 dicts:
-        * `entry_types[n]` is a string specifying the entry type of node `n`, as defined above
-        * `exit_types[n]` is a string specifying the exit type of node `n`, as defined above
-        * `param_sizes[n]` is an int specifying the number of parameters of node `n`, as propagated from learnable
-                         parameter nodes up to either a split or a normal entry node, whichever is encountered first
+        Updates 3 dicts:
+        * `self.entry_types[n]` is a string specifying the entry type of node `n`, as defined above
+        * `self.exit_types[n]` is a string specifying the exit type of node `n`, as defined above
+        * `self.propagated[n]` is an int specifying the number of parameters of node `n`, as propagated from learnable
+           parameter nodes up to either a split or a normal entry node, whichever is encountered first
         """
-        learnable_placeholder_nodes = [n for n in self.gm.graph.nodes if n.op == 'placeholder' and n.name.startswith('l_self_')]
+        learnable_placeholder_nodes = [n for n in self.gm.graph.nodes if n.op == 'placeholder' and n.name.startswith('l_self_') and '_parameters_' in n.name]
+        buffer_placeholder_nodes = [n for n in self.gm.graph.nodes if n.op == 'placeholder' and n.name.startswith('l_self_') and '_parameters_' not in n.name]
         input_placeholder_nodes = [n for n in self.gm.graph.nodes if n.op == 'placeholder' and not n.name.startswith('l_self_')]
         output_nodes = [n for n in self.gm.graph.nodes if n.op == 'output']
-        entry_types:Mapping[fx.Node, str] = {}  # ['normal','learnable','learn-split','special']
-        exit_types:Mapping[fx.Node, str] = {}  # ['normal','special']
-        param_sizes:Mapping[fx.Node, int] = {}  # Assign to first 'normal' or 'split' node
+        self.entry_types = {}  # ['normal','learnable','learn-split','special']
+        self.exit_types = {}  # ['normal','special']
+        self.propagated_params = {}  # Assign to first 'normal' or 'split' node
         
         # BFS on input placeholder nodes
-        for n in input_placeholder_nodes: entry_types[n] = 'normal'
+        for n in input_placeholder_nodes: self.entry_types[n] = 'normal'
         queue = deque(input_placeholder_nodes)  # Initialize to contain all output nodes
         while queue:
             n = queue.popleft()
             out_nodes = list(n.users.keys())
             for out_node in out_nodes:
-                if out_node in entry_types: continue  # Already traversed
-                entry_types[out_node] = 'normal'
+                if out_node in self.entry_types: continue  # Already traversed
+                self.entry_types[out_node] = 'normal'
                 queue.append(out_node)
 
         # BFS on learnable placeholder nodes
-        for n in learnable_placeholder_nodes: entry_types[n] = 'learnable'
+        for n in learnable_placeholder_nodes: self.entry_types[n] = 'learnable'
         queue = deque(learnable_placeholder_nodes)  # Initialize to contain all output nodes
         temp_sizes = {k:v for k,v in self.input_sizes.items()}
         while queue:
@@ -337,46 +342,54 @@ class MavTracer:
             out_nodes = list(n.users.keys())
 
             # Detect first split
-            if len(out_nodes) > 1 and entry_types[n] == 'learnable':
-                entry_types[n] = 'learn-split'
-                param_sizes[n] = param_sizes.get(n,0) + input_size
+            if len(out_nodes) > 1 and self.entry_types[n] == 'learnable':
+                self.entry_types[n] = 'learn-split'
+                self.propagated_params[n] = self.propagated_params.get(n,0) + input_size
 
             # Propagate to output nodes and queue them
             for out_node in out_nodes:
-                if out_node in entry_types:
+                if out_node in self.entry_types:
                     # Already traversed, so stop processing, but assign propagated input size if not assigned upstream yet
-                    if entry_types[n] == 'learnable': 
-                        if entry_types[out_node] == 'learnable':
+                    if self.entry_types[n] == 'learnable': 
+                        if self.entry_types[out_node] == 'learnable':
                             temp_sizes[out_node] = temp_sizes.get(out_node,0) + input_size
                         else:
-                            param_sizes[out_node] = param_sizes.get(out_node,0) + input_size
+                            self.propagated_params[out_node] = self.propagated_params.get(out_node,0) + input_size
                     continue
-                entry_types[out_node] = entry_types[n]
-                if entry_types[n] == 'learnable': temp_sizes[out_node] = temp_sizes.get(out_node,0) + input_size
+                self.entry_types[out_node] = self.entry_types[n]
+                if self.entry_types[n] == 'learnable': temp_sizes[out_node] = temp_sizes.get(out_node,0) + input_size
+                queue.append(out_node)
+        
+        # BFS on buffer placeholder nodes
+        for n in buffer_placeholder_nodes: self.entry_types[n] = 'buffer'
+        queue = deque(buffer_placeholder_nodes)  # Initialize to contain all output nodes
+        while queue:
+            n = queue.popleft()
+            out_nodes = list(n.users.keys())
+            for out_node in out_nodes:
+                if out_node in self.entry_types: continue  # Already traversed
+                self.entry_types[out_node] = self.entry_types[n]
                 queue.append(out_node)
         
         # BFS on output nodes
-        for n in output_nodes: exit_types[n] = 'normal'
+        for n in output_nodes: self.exit_types[n] = 'normal'
         queue = deque(output_nodes)  # Initialize to contain all output nodes
         while queue:
             n = queue.popleft()
             in_nodes = n.all_input_nodes
             for in_node in in_nodes:
-                if in_node in exit_types: continue  # Already traversed
-                exit_types[in_node] = 'normal'
+                if in_node in self.exit_types: continue  # Already traversed
+                self.exit_types[in_node] = 'normal'
                 queue.append(in_node)
 
         # Special entry and exit nodes
         for n in self.gm.graph.nodes:
-            if n not in entry_types: entry_types[n] = 'special'
-            if n not in exit_types: exit_types[n] = 'special'
+            if n not in self.entry_types: self.entry_types[n] = 'special'
+            if n not in self.exit_types: self.exit_types[n] = 'special'
 
-        # Return values
-        return entry_types, exit_types, param_sizes
-
-    def get_operation(self, n:fx.Node, entry_types):
-        if entry_types.get(n,'unknown') == 'learn-split':
-            input_entry_types = [entry_types.get(in_node, 'unknown') for in_node in n.all_input_nodes]
+    def get_operation(self, n:fx.Node):
+        if self.entry_types.get(n,'unknown') == 'learn-split':
+            input_entry_types = [self.entry_types.get(in_node, 'unknown') for in_node in n.all_input_nodes]
             if not any([t=='learn-split' for t in input_entry_types]): return 'Shared params'
         target_name = self.target_names.get(n, '')
         match n.op:
@@ -423,25 +436,28 @@ class MavTracer:
 
     def build_graph(self):
         self.build_long_name_replacements()
-        entry_types, exit_types, param_sizes = self.calc_entry_exit_types()
-        if self.show_param_nodes: param_sizes = self.input_sizes
+        self.calc_entry_exit_types()
+        if self.keep_internal_nodes: 
+            prop_params = {k:v for k,v in self.input_sizes.items() if self.entry_types.get(k,'')=='learnable' or self.entry_types.get(k,'')=='learn-split'}
+        else:
+            prop_params = self.propagated_params
         nodes: List[MavNode] = []
         nodes_by_name: Mapping[str, MavNode] = {}
         connections: List[MavConnection] = []
         existing_connections: Set[Tuple[MavNode, MavNode]] = set([])
         for n in self.gm.graph.nodes:
             # Create a new node and append it to the list
-            entry_type = entry_types.get(n, 'unknown')
-            exit_type = exit_types.get(n, 'unknown')
-            if entry_type != 'normal' and entry_type != 'learn-split' and not self.show_param_nodes: continue
+            entry_type = self.entry_types.get(n, 'unknown')
+            exit_type = self.exit_types.get(n, 'unknown')
+            if entry_type != 'normal' and entry_type != 'learn-split' and not self.keep_internal_nodes: continue
             if exit_type != 'normal': continue
             short_name = self.shorten(n.name)
             node = MavNode(short_name, 0, 0)            
-            node.operation = self.get_operation(n, entry_types)
+            node.operation = self.get_operation(n)
             if not node.operation:
                 break_here = True
             node.activations = self.interp.shapes.get(n, (0,))
-            node.params = self.param_counts.get(n, 0) + param_sizes.get(n, 0)
+            node.params = self.param_counts.get(n, 0) + prop_params.get(n, 0)
             node.flops = self.interp.flops.get(n, 0)
             node.metadata['args'] = self.shorten(n.args.__repr__())
             node.metadata['kwargs'] = n.kwargs.__repr__()

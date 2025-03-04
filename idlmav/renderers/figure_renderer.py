@@ -4,6 +4,7 @@ from .renderer_utils import use_straight_connection, segmented_line_coords
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import plotly.colors as pc
 
 class FigureRenderer:
     """
@@ -32,6 +33,14 @@ class FigureRenderer:
 
     def __init__(self, g:MavGraph):
         self.g = g
+
+        # Options
+        self.size_color_options = [('params','operation'),
+                                   ('flops','operation'),
+                                   ('params','flops'),
+                                   ('flops','params')]
+        self.continuous_colorscale = 'Bluered'
+        self.size_color_idx: int = None
 
         # Derived parameters
         self.in_level = min([n.y for n in g.in_nodes])
@@ -108,6 +117,27 @@ class FigureRenderer:
         height_px: int:
             The height of the figure in pixels
 
+        continuous_colorscale: any
+            This palette is used when coloring nodes by the number of parameters or
+            FLOPS. The value is passed as-is to the `colorscale` field of the
+            `marker` object (see https://plotly.com/python/colorscales/#color-scale-for-scatter-plots-with-graph-objects).
+            It can take any form accepted by Plotly, but the easiest is a single
+            string such as "Viridis", "Thermal", etc. See https://plotly.com/python/builtin-colorscales/
+            for more options.
+
+        size_color_idx: int or None
+            Determines the criteria used for the size and color of node markers:
+            * 0: Size by number of parameters, color by operation 
+            * 1: Size by number of FLOPS, color by operation 
+            * 2: Size by number of parameters, color by number of FLOPS 
+            * 3: Size by number of FLOPS, color by number of parameters
+
+            This can also be changed interactively using a dropdown menu. This 
+            parameter simply determines the initial state of the dropdown menu.
+
+            If unassigned or None, this defaults to 1 if `keep_internal_nodes` was
+            selected during tracing or 0 otherwise.
+
         Returns
         -------
         `plotly.graph_objects.Figure` object that can be displayed using `.show()`
@@ -117,6 +147,8 @@ class FigureRenderer:
 
         # Setup parameters
         g = self.g
+        self.continuous_colorscale = opts.continuous_colorscale
+        self.size_color_idx = opts.size_color_idx
         x_margin = 0.5  # Higher to cater for skip connections with offsets to avoid overlapping
         y_margin = 0.25
     
@@ -138,7 +170,7 @@ class FigureRenderer:
             self.overview_sp_col = 1
             self.main_sp_col += 1
             if self.table_sp_col is not None: self.table_sp_col += 1
-        self.fig = make_subplots(rows=1, cols=num_subplots, vertical_spacing=0.03, specs=subplot_specs,
+        self.fig = make_subplots(rows=1, cols=num_subplots, horizontal_spacing=0.01, specs=subplot_specs,
                             column_widths=column_widths)
 
         # Draw connections lines between the nodes
@@ -162,11 +194,12 @@ class FigureRenderer:
         if opts.add_overview: self.fig.add_trace(line_trace, row=1, col=self.overview_sp_col)
 
         # Draw nodes
-        total_non_input_params = sum([n.params for n in g.nodes if n not in g.in_nodes])
-        total_non_input_flops = sum([n.flops for n in g.nodes if n not in g.in_nodes])
-        initially_size_by_flops = total_non_input_params == 0 and total_non_input_flops > 0
-        size_by = 'flops' if initially_size_by_flops else 'params'
-        color_by = 'operation'
+        if self.size_color_idx is None:
+            total_non_input_params = sum([n.params for n in g.nodes if n not in g.in_nodes])
+            total_non_input_flops = sum([n.flops for n in g.nodes if n not in g.in_nodes])
+            initially_size_by_flops = total_non_input_params == 0 and total_non_input_flops > 0
+            self.size_color_idx = 1 if initially_size_by_flops else 0
+        size_by, color_by = self.size_color_options[self.size_color_idx]
         node_trace = self.build_node_trace(False, size_by, color_by)
         self.fig.add_trace(node_trace, row=1, col=self.main_sp_col)
         self.node_trace_idx = len(self.fig.data)-1
@@ -180,7 +213,7 @@ class FigureRenderer:
             self.fig.add_shape(type="rect",
                 xref="x", yref="y",
                 x0=self.min_x-x_margin, x1=self.max_x+x_margin, y0=self.in_level-y_margin, y1=self.in_level-y_margin+opts.num_levels_displayed,
-                line=dict(color="#000000"),
+                line=dict(color='#2A3F5F', width=1), fillcolor='rgba(42,63,96,0.2)',
                 row=1, col=self.overview_sp_col
             )
 
@@ -209,7 +242,7 @@ class FigureRenderer:
             self.fig.add_trace(table_trace, row=1, col=self.table_sp_col)
         
         # Add dropdown menu for marker sizes and colors
-        self.fig.update_layout(updatemenus=[self.build_styling_menu(pad_t=8, initially_size_by_flops=initially_size_by_flops)])
+        self.fig.update_layout(updatemenus=[self.build_styling_menu(pad_t=8)])
 
         # Add slider if selected
         if opts.add_slider:
@@ -267,7 +300,7 @@ class FigureRenderer:
         
         colors = [self.get_node_color(n, color_by) for n in self.g.nodes]
 
-        return dict(size=sizes, color=colors, colorscale='Bluered')
+        return dict(size=sizes, color=colors, colorscale=self.continuous_colorscale)
 
     def build_menu_button(self, size_by:str, color_by:str):
         size_color_labels = dict(operation='operation', params='params', flops='FLOPS')
@@ -280,13 +313,9 @@ class FigureRenderer:
             method="restyle"
         )
 
-    def build_styling_menu(self, pad_t=0, initially_size_by_flops:bool=False):
-        size_color_options = [('params','operation'),
-                              ('flops','operation'),
-                              ('params','flops'),
-                              ('flops','params')]
-        menu_buttons = [self.build_menu_button(size_by, color_by) for (size_by, color_by) in size_color_options]
-        active = 1 if initially_size_by_flops else 0
+    def build_styling_menu(self, pad_t=0):
+        menu_buttons = [self.build_menu_button(size_by, color_by) for (size_by, color_by) in self.size_color_options]
+        active = self.size_color_idx
         return dict(buttons=menu_buttons, showactive=True, direction="up",
                     pad=dict(l=0, r=0, t=pad_t, b=0),
                     x=0, xanchor="left",
@@ -300,7 +329,7 @@ class FigureRenderer:
             step = dict(
                 method="relayout",
                 args=[dict({
-                    "shapes":[dict(type="rect", xref="x", yref="y",line=dict(color="#000000"),
+                    "shapes":[dict(type="rect", xref="x", yref="y",line=dict(color="#2A3F5F", width=1), fillcolor='rgba(42,63,96,0.2)',
                         x0=self.min_x-x_margin, y0=i, x1=self.max_x+x_margin, y1=i+num_levels_displayed,
                     )],
                     yaxis_varname:dict(range=[i+num_levels_displayed, i], showgrid=False, zeroline=False, tickmode='array', tickvals=[]),

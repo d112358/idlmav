@@ -84,7 +84,7 @@ class MavLayout():
         if largest_level_len > 5:
             print(f'Total nodes: {len(self.g.nodes)}. Input nodes: {len(self.g.in_nodes)}. Output nodes: {len(self.g.out_nodes)}. Largest level nodes: {largest_level_len}')
         if largest_level_len > 15:
-            warnings.warn(f'The largest level has {largest_level_len} nodes. This is an indication that something may have gone wrong during the tracing step')
+            warnings.warn(f'The largest level has {largest_level_len} nodes. This may be an indication that something may have gone wrong during the tracing step')
             warnings.warn('Falling back to greedy layout algorithm')
             self.place_within_levels_greedy(levels)
         else:

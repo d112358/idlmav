@@ -141,8 +141,6 @@ class ShapeInterpreter(fx.Interpreter):
         except Exception as e:
             warnings.warn(f'FLOPS calculation failed for module {submod.__class__.__name__}: {e}')
             macs = 0  
-            # TODO: implement a fallback calculation here for well-known modules
-            # e.g. https://medium.com/@pashashaik/a-guide-to-hand-calculating-flops-and-macs-fa5221ce5ccc
         self.cur_macs = macs
 
         # Return the result
