@@ -30,8 +30,19 @@ These have limited interactivity and synchronization between panels compared to 
 
 
 # Installation
-
+## For VSCode using Plotly 5
+From version 6, `plotly` are basing their `go.FigureWidget` object on `anywidget`. The interactive widgets in `idlmav` are based on `go.FigureWidget`. Some VSCode environments may experience trouble with this. Extensive testing has not been performed. Use the installation steps below to use `idlmav` with `plotly5`
 ```
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+pip install "plotly>=5,<6"
+pip install idlmav
+```
+
+## For VSCode using Plotly 6
+To use the this version of `plotly`, `anywidget` must be installed separately.
+```
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+pip install anywidget
 pip install idlmav
 ```
 
@@ -39,7 +50,7 @@ pip install idlmav
 ## Preparation
 ```python
 import torch, torchvision
-from idlmav import MAV, plotly_renderer
+from idlmav import MAV
 device = 'cpu'
 model = torchvision.models.resnet18().to(device)
 x = torch.randn(16,3,160,160).to(device)
@@ -53,8 +64,7 @@ mav = MAV(model, x, device=device)
 * Interactions limited to hover, pan and zoom, slider and dropdown menu provided by Plotly
 * No synchronization between graph and table
 ```python
-with plotly_renderer('notebook_connected'):
-    mav.show_figure()
+mav.show_figure()
 ```
 ![Portable figure](https://github.com/d112358/idlmav/raw/main/images/portable_figure.png)
 
@@ -65,19 +75,18 @@ with plotly_renderer('notebook_connected'):
 * Clicking a node in the main graph highlights it in the table
 * Limited portability expected to fluctuate over time on different environments
 ```python
-with plotly_renderer('notebook_connected'):
-    mav.show_widget(add_slider=True, add_overview=True)
+mav.show_widget(add_slider=True, add_overview=True)
 ```
 ![Interactive widget](https://github.com/d112358/idlmav/raw/main/images/interactive_widget.png)
 
 ## HTML export
 * Most portable option
 * Exports the same portable figure shown above to a standalone HTML file
-* The `offline` parameter specifies how to include the plotly dependency in the exported HTML
+* The `export_for_offline_use` parameter specifies how to include the plotly dependency in the exported HTML
   - `False` (default): The exported HTML is small, but requires a working internet connection to display correctly
   - `True`: The exported HTML is around 4MB in size and displays correctly without a working internet connection
 ```python
-mav.export_static_html('resnet18.html', offline=False)
+mav.export_static_html('resnet18.html', export_for_offline_use=False)
 ```
 
 ## Specifying colors
@@ -85,12 +94,11 @@ mav.export_static_html('resnet18.html', offline=False)
 * User-defined palettes can be specified as a list of `'#RRGGBB'` formatted strings
 * The key to `fixed_color_map` may be a string in the **Operation** column or a category as listed [here](https://pytorch.org/docs/stable/nn.html)
 ```python
-with plotly_renderer('notebook_connected'):
-    mav.show_figure(
-        palette='Vivid',
-        avoid_palette_idxs=set([10]),
-        fixed_color_map={'Convolution':7, 'add()':0, 'nn.MaxPool2d':5}
-    )
+mav.show_figure(
+    palette='Vivid',
+    avoid_palette_idxs=set([10]),
+    fixed_color_map={'Convolution':7, 'add()':0, 'nn.MaxPool2d':5}
+)
 ```
 ![Specifying colors](https://github.com/d112358/idlmav/raw/main/images/specifying_colors.png)
 
@@ -99,8 +107,7 @@ with plotly_renderer('notebook_connected'):
   - On Colab the slider gets more in the way rather than adding value
   - The custom JS used for table synchronization may not be supported everywhere
 ```python
-with plotly_renderer('notebook_connected'):
-    mav.show_widget(add_overview=False, add_slider=False, add_table=False)    
+mav.show_widget(add_overview=False, add_slider=False, add_table=False)    
 ```
 ![Adding and removing panels](https://github.com/d112358/idlmav/raw/main/images/removing_panels.png)
 
@@ -115,12 +122,11 @@ with plotly_renderer('notebook_connected'):
 * The default `merge_threshold` value normally results in nodes without parameters as well as normalization modules being merged
 ```python
 mav = MAV(model, x, device=device, merge_threshold=-1)
-with plotly_renderer('notebook_connected'):
-    mav.show_figure(
-        palette='Vivid',
-        avoid_palette_idxs=set([10]),
-        fixed_color_map={'Convolution':7, 'add()':0, 'nn.MaxPool2d':5}
-    )
+mav.show_figure(
+    palette='Vivid',
+    avoid_palette_idxs=set([10]),
+    fixed_color_map={'Convolution':7, 'add()':0, 'nn.MaxPool2d':5}
+)
 ```
 ![Modifying merging behaviour](https://github.com/d112358/idlmav/raw/main/images/modifying_merging_behaviour.png)
 
@@ -139,6 +145,26 @@ renderer = WidgetRenderer(tracer.g)
 display(renderer.render())
 ```
 ![Calling internal components directly](https://github.com/d112358/idlmav/raw/main/images/calling_internal_components_directly.png)
+
+## Reducing notebook file size
+* On some environments, plotly will include the entire plotly library (~ 4MB) in the notebook DOM for portable figures (`go.Figure`)
+* This is not the case for interactive widgets (`go.FigureWidget`) where the plotly library is served from the backend
+* Using a custom plotly renderer can also avoid this for `go.Figure`
+* Custom plotly renderers are made available in `idlmav` via a context manager:
+  ```python
+  from idlmav import plotly_renderer 
+  with plotly_renderer('notebook_connected'):
+      mav.show_figure()
+  ```
+* Available custom plotly renderers may be listed as follows:
+  ```python
+  import plotly.io as pio
+  list(pio.renderers)
+  ```
+* It is best to experiment with different renderers for your environment. From personal experience, the following may be good starting points:
+  * `notebook_connected` or `vscode` with Plotly 5 on VSCode
+  * `vscode` with Plotly 6 on VSCode
+  * `iframe` with Plotly 5 on Kaggle
 
 # Features
 * Works on incomplete models and models without a successful forward pass
