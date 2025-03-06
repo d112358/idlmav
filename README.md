@@ -2,14 +2,14 @@
 Interactive deep learning model architecture visualization (IDLMAV) is a tool that creates interactive visualizations of model architectures for display in Jupyter notebooks.
 * It does not require a successful forward pass: it can also visualize partial models
 * It produces three outputs to allow a trade-off between portability and interactivity
-  - A portable figure that works on most environments and displays correctly without the need of a running backend/kernel, e.g. in [nbviewer](https://nbviewer.org/)
+  - A portable figure that works on most environments and displays correctly without the need of a running backend/kernel, e.g. in [nbviewer](https://nbviewer.org/) ([example](https://nbviewer.org/github/d112358/idlmav/blob/main/portable_figure_example.ipynb)) or [nbsanity](https://nbsanity.com/) ([example](https://nbsanity.com/d112358/idlmav/blob/main/portable_figure_example.ipynb))
   - An interactive widget with synchronized scrolling and interactions between sub-plots
-  - Export to a standalone HTML file
+  - Export to a static HTML file
 
 # Use cases
-* Iteratively designing a model and viewing activations, parameter counts and FLOPS "so far" before the whole model has been defined
-* Document a model in a notebook and generate the architecture in such a way that it is viewable on without a running kernel, e.g. in [nbviewer](https://nbviewer.org/)
-* Visualize 3rd party models when importing them into a notebook
+* Incrementally designing a model and viewing activations, parameter counts and FLOPS "so far" before the whole model has been defined
+* Documenting a model in a notebook and generating the architecture in such a way that it is viewable without a running kernel, e.g. in [nbviewer](https://nbviewer.org/) ([example](https://nbviewer.org/github/d112358/idlmav/blob/main/portable_figure_example.ipynb)) or [nbsanity](https://nbsanity.com/) ([example](https://nbsanity.com/d112358/idlmav/blob/main/portable_figure_example.ipynb))
+* Visualizing 3rd party models after importing them into a notebook
 * Finding hotspots (parameters or FLOPS) in a model for optimization purposes
 
 # Static HTML examples
@@ -30,16 +30,16 @@ These have limited interactivity and synchronization between panels compared to 
 
 
 # Installation
-## For VSCode using Plotly 5
-From version 6, `plotly` are basing their `go.FigureWidget` object on `anywidget`. The interactive widgets in `idlmav` are based on `go.FigureWidget`. Some VSCode environments may experience trouble with this. Extensive testing has not been performed. Use the installation steps below to use `idlmav` with `plotly5`
+## Using Plotly 5
+Since version 6, `plotly` are basing their `go.FigureWidget` object on `anywidget`. The interactive widgets in `idlmav` are based on `go.FigureWidget`. `idlmav` has not yet been tested extensively with `plotly` version 6 and/or `anywidget`. Use the installation steps below to use `idlmav` with `plotly` 5
 ```
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 pip install "plotly>=5,<6"
 pip install idlmav
 ```
 
-## For VSCode using Plotly 6
-To use the this version of `plotly`, `anywidget` must be installed separately.
+## Using Plotly 6
+To use the latest version of `plotly`, `anywidget` must be installed separately.
 ```
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 pip install anywidget
@@ -48,19 +48,19 @@ pip install idlmav
 
 # Usage examples
 ## Preparation
+Run these steps before running 
 ```python
 import torch, torchvision
 from idlmav import MAV
-device = 'cpu'
-model = torchvision.models.resnet18().to(device)
-x = torch.randn(16,3,160,160).to(device)
-mav = MAV(model, x, device=device)
+model = torchvision.models.resnet18()
+x = torch.randn(16,3,160,160)
+mav = MAV(model, x, device='cpu')
 ```
 
 ## Portable figure
 * Based on [plotly.graph_objects.Figure](https://plotly.com/python/creating-and-updating-figures/#figures-as-graph-objects)
 * No dependency on `ipywidgets` or `plotly.graph_objects.FigureWidget` for portability reasons
-* Displays correctly without the need of a running backend/kernel, e.g. in [nbviewer](https://nbviewer.org/)
+* Displays correctly without the need of a running backend/kernel, e.g. in [nbviewer](https://nbviewer.org/) ([example](https://nbviewer.org/github/d112358/idlmav/blob/main/portable_figure_example.ipynb)) or [nbsanity](https://nbsanity.com/) ([example](https://nbsanity.com/d112358/idlmav/blob/main/portable_figure_example.ipynb))
 * Interactions limited to hover, pan and zoom, slider and dropdown menu provided by Plotly
 * No synchronization between graph and table
 ```python
@@ -105,6 +105,7 @@ mav.show_figure(
 ## Adding and removing panels
 * This could help with portability or user experience on some environments, e.g.
   - On Colab the slider gets more in the way rather than adding value
+  - Wide models are sometimes easier to navigate without the table
   - The custom JS used for table synchronization may not be supported everywhere
 ```python
 mav.show_widget(add_overview=False, add_slider=False, add_table=False)    
@@ -121,7 +122,7 @@ mav.show_widget(add_overview=False, add_slider=False, add_table=False)
   - Nodes for which the input node has multiple output connections
 * The default `merge_threshold` value normally results in nodes without parameters as well as normalization modules being merged
 ```python
-mav = MAV(model, x, device=device, merge_threshold=-1)
+mav = MAV(model, x, device='cpu', merge_threshold=-1)
 mav.show_figure(
     palette='Vivid',
     avoid_palette_idxs=set([10]),
@@ -137,7 +138,7 @@ mav.show_figure(
 from idlmav import MavTracer, merge_graph_nodes, layout_graph_nodes, color_graph_nodes, WidgetRenderer
 from IPython.display import display
 
-tracer = MavTracer(model, x, device=device)
+tracer = MavTracer(model, x, device='cpu')
 merge_graph_nodes(tracer.g)
 layout_graph_nodes(tracer.g)
 color_graph_nodes(tracer.g)
@@ -149,7 +150,7 @@ display(renderer.render())
 ## Reducing notebook file size
 * On some environments, plotly will include the entire plotly library (~ 4MB) in the notebook DOM for portable figures (`go.Figure`)
 * This is not the case for interactive widgets (`go.FigureWidget`) where the plotly library is served from the backend
-* Using a custom plotly renderer can also avoid this for `go.Figure`
+* Using a custom plotly renderer can also avoid this for `go.Figure`, importing plotly via a CDN instead
 * Custom plotly renderers are made available in `idlmav` via a context manager:
   ```python
   from idlmav import plotly_renderer 
@@ -195,12 +196,12 @@ display(renderer.render())
 * Inherited from `torch.compile`
   - In models parsed with `torch.compile`, classes are flattened into functions and learnable parameters are passed as additional inputs
 * Inherited from ipywidgets:
-  - Interactive widget requires a running kernel to dynamically create DOM elements
+  - Interactive widgets require a running kernel to dynamically create DOM elements
 * Inherited from plotly
-  - Portable figure can only support a horizontal slider
-  - On portable figure, overview panel synchronizas only to slider, not to Plotly pan & zoom controls
+  - Portable figures can only support a horizontal slider
+  - On portable figures, overview panels synchronize only to the slider, not to Plotly built-in pan & zoom controls
 * Environment-specific limitations
-  - Kaggle currently (Dec 2024) seems to have trouble displaying `go.FigureWidget`, so only the portable figure is available there
+  - Kaggle recently (Dec 2024) seemed to have trouble displaying `go.FigureWidget`, so only the portable figure is available there
 
 # Planned updates
 * Make the primary direction (down/right/up/left) configurable
@@ -208,7 +209,7 @@ display(renderer.render())
 
 # Contributing
 Reports of any issues encountered as most welcome! 
-Please provide code and a brief description of your environment to make these easy to reproduce and to verify fixes
+Please provide reproducible example code and a brief description of your environment to simplify the process of reproducing the issue and verifying fixes
 
 Please also make issues easy to categorize by being specific about the category they belong to:
 * An error occurred during parsing, layout or MAV object instantiation
