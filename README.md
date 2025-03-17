@@ -2,13 +2,13 @@
 Interactive deep learning model architecture visualization (IDLMAV) is a tool that creates interactive visualizations of model architectures for display in Jupyter notebooks.
 * It does not require a successful forward pass: it can also visualize partial models
 * It produces three outputs to allow a trade-off between portability and interactivity
-  - A portable figure that works on most environments and displays correctly without the need of a running backend/kernel, e.g. in [nbviewer](https://nbviewer.org/) ([example](https://nbviewer.org/github/d112358/idlmav/blob/main/examples.ipynb)) or [nbsanity](https://nbsanity.com/) ([example](https://nbsanity.com/d112358/idlmav/blob/main/portable_fig_example.ipynb))
+  - A portable figure that works on most environments and displays correctly without the need of a running backend/kernel, e.g. in [nbviewer](https://nbviewer.org/) ([example](https://nbviewer.org/github/d112358/idlmav/blob/main/portable_fig_example.ipynb)) or [nbsanity](https://nbsanity.com/) ([example](https://nbsanity.com/d112358/idlmav/blob/main/portable_fig_example.ipynb))
   - An interactive widget with synchronized scrolling and interactions between sub-plots
   - Export to a static HTML file
 
 # Use cases
 * Incrementally designing a model and viewing activations, parameter counts and FLOPS "so far" before the whole model has been defined
-* Documenting a model in a notebook and generating the architecture in such a way that it is viewable without a running kernel, e.g. in [nbviewer](https://nbviewer.org/) ([example](https://nbviewer.org/github/d112358/idlmav/blob/main/examples.ipynb)) or [nbsanity](https://nbsanity.com/) ([example](https://nbsanity.com/d112358/idlmav/blob/main/portable_fig_example.ipynb))
+* Documenting a model in a notebook and generating the architecture in such a way that it is viewable without a running kernel, e.g. in [nbviewer](https://nbviewer.org/) ([example](https://nbviewer.org/github/d112358/idlmav/blob/main/portable_fig_example.ipynb)) or [nbsanity](https://nbsanity.com/) ([example](https://nbsanity.com/d112358/idlmav/blob/main/portable_fig_example.ipynb))
 * Visualizing 3rd party models after importing them into a notebook
 * Finding hotspots (parameters or FLOPS) in a model for optimization purposes
 
@@ -60,7 +60,7 @@ mav = MAV(model, x, device='cpu')
 ## Portable figure
 * Based on [plotly.graph_objects.Figure](https://plotly.com/python/creating-and-updating-figures/#figures-as-graph-objects)
 * No dependency on `ipywidgets` or `plotly.graph_objects.FigureWidget` for portability reasons
-* Displays correctly without the need of a running backend/kernel, e.g. in [nbviewer](https://nbviewer.org/) ([example](https://nbviewer.org/github/d112358/idlmav/blob/main/examples.ipynb)) or [nbsanity](https://nbsanity.com/) ([example](https://nbsanity.com/d112358/idlmav/blob/main/portable_fig_example.ipynb))
+* Displays correctly without the need of a running backend/kernel, e.g. in [nbviewer](https://nbviewer.org/) ([example](https://nbviewer.org/github/d112358/idlmav/blob/main/portable_fig_example.ipynb)) or [nbsanity](https://nbsanity.com/) ([example](https://nbsanity.com/d112358/idlmav/blob/main/portable_fig_example.ipynb))
 * Interactions limited to hover, pan and zoom, slider and dropdown menu provided by Plotly
 * No synchronization between graph and table
 ```python
